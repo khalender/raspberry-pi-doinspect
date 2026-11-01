@@ -9,6 +9,8 @@ DOINSPECT_TARGETS=node=http://127.0.0.1:9100/metrics DOINSPECT_LOCAL=- DOINSPECT
 curl -s 127.0.0.1:8080/health; curl -s 127.0.0.1:8080/api/last
 ```
 
+Pages (HTML with SVG charts drawn by the server, no JavaScript, refresh every 30 s): `/` (machines and the biggest containers), `/containers`, `/machine/{name}`, each with `?range=1h|6h|24h|7d` (default 24h). A chart draws at most 300 steps: the line is each step's average, the light band its peak. A machine whose last report is more than about two intervals old shows as missing. JetBrains Mono ships with the binary (`internal/web/static`, SIL Open Font License), so the pages load nothing from outside.
+
 Reading the local machine needs Linux: run it in a container with `-v /proc:/host/proc:ro -v /sys:/host/sys:ro`.
 
 | Variable | Default | Meaning |
@@ -28,4 +30,4 @@ Series are named `<machine>/<figure>`: `cpu` and `cpu[N]` (percent busy), `ram.u
 
 Containers are found in the cgroup v2 folders under `/sys/fs/cgroup` (systemd or cgroupfs driver). Traffic comes from `/proc/<pid>/net/dev` of one of the container's processes, found through `/proc/<pid>/cgroup`; `cgroup.procs` cannot be used, because inside a container it lists every outside process as pid 0.
 
-Packages: `internal/raw` (one reading, from a node_exporter page or from `/proc`), `internal/derive` (readings to samples and rates), `internal/ring` (ring buffers and the snapshot), `internal/collect` (the loop), `internal/config` (`DOINSPECT_*`).
+Packages: `internal/raw` (one reading, from a node_exporter page or from `/proc`), `internal/derive` (readings to samples and rates), `internal/ring` (ring buffers and the snapshot), `internal/collect` (the loop), `internal/web` (pages and charts), `internal/config` (`DOINSPECT_*`).

@@ -1,0 +1,25 @@
+{{template "top" .}}
+  <section class="machines">
+  {{range .Body.Cards}}
+    <article class="card">
+      <div class="card-head"><h2><a href="/machine/{{.Name}}?range={{$.Range.Name}}">{{.Name}} →</a></h2><span class="badge {{if .OK}}ok{{else}}bad{{end}}">{{.Status}}</span></div>
+      <span class="meta">{{if .OK}}{{.Meta}}{{else}}last report {{.Since}}{{end}}</span>
+      <div class="figures">
+        <div class="fig"><span class="k">CPU</span><span class="v">{{or .CPU "-"}}</span><div class="meter"><i style="width:{{.CPUPct}}%"></i></div></div>
+        <div class="fig"><span class="k">RAM</span><span class="v">{{or .RAM "-"}} <small>{{.RAMOf}}</small></span><div class="meter"><i class="{{if gt .RAMPct 85.0}}warn{{end}}" style="width:{{.RAMPct}}%"></i></div></div>
+        <div class="fig"><span class="k">Load 1 · 5 · 15 min</span><span class="v s">{{or .Load "-"}}</span></div>
+        {{if .Extra}}<div class="fig"><span class="k">{{.Extra}}</span><span class="v s">{{.ExtraVal}}</span><span class="k">{{.ExtraSub}}</span></div>{{end}}
+      </div>
+      <div class="mini"><span class="k"><span>CPU, {{$.Range.Name}}</span><b>{{.CPUPeak}}</b></span>{{.CPUChart}}</div>
+      <div class="mini"><span class="k"><span>RAM, {{$.Range.Name}}</span><b>{{.RAMNow}}</b></span>{{.RAMChart}}</div>
+    </article>
+  {{else}}
+    <p class="empty">[ ] No machines set up. Set DOINSPECT_TARGETS or DOINSPECT_LOCAL.</p>
+  {{end}}
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Biggest containers</h2><span>{{if .Body.More}}<a href="/containers?range={{.Range.Name}}">all containers ({{.Body.More}} more) →</a>{{end}}</span></div>
+    {{template "ctrtable" .Body.Containers}}
+  </section>
+{{template "bottom" .}}

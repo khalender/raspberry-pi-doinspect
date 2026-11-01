@@ -20,6 +20,7 @@ import (
 	"doinspect/server/internal/config"
 	"doinspect/server/internal/raw"
 	"doinspect/server/internal/ring"
+	"doinspect/server/internal/web"
 )
 
 var version = "0.1.0" // set with -ldflags "-X main.version=..."
@@ -66,7 +67,8 @@ func run(log *slog.Logger) error {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version, "machines": col.Statuses(), "series": len(col.Store.Keys())})
 	})
-	// The newest point of every series, for checks and scripts; the pages come in T03.
+	(&web.Server{Store: col.Store, Statuses: col.Statuses, Now: time.Now, Version: version, Log: log}).Register(mux)
+	// The newest point of every series, for checks and scripts.
 	mux.HandleFunc("GET /api/last", func(w http.ResponseWriter, r *http.Request) {
 		out := map[string]float64{}
 		for _, k := range col.Store.Keys() {

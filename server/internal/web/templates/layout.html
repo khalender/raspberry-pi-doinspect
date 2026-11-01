@@ -1,0 +1,55 @@
+{{define "top"}}<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="30">
+<title>{{.Title}} · doinspect</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="crumb">{{.Crumb}}</span>
+    <h1>{{.Title}}</h1>
+    {{with .Lead}}<span class="lead">{{.}}</span>{{end}}
+  </header>
+  <div class="bar">
+    <nav class="group" aria-label="Pages">
+      <a href="/?range={{.Range.Name}}"{{if eq .Nav "overview"}} aria-current="page"{{end}}>Overview</a>
+      <a href="/containers?range={{.Range.Name}}"{{if eq .Nav "containers"}} aria-current="page"{{end}}>Containers</a>
+    </nav>
+    <nav class="group" aria-label="Time range">
+      {{$cur := .Range.Name}}{{$path := .Path}}{{range .Ranges}}<a href="{{$path}}?range={{.Name}}"{{if eq .Name $cur}} aria-current="true"{{end}}>{{.Name}}</a>{{end}}
+    </nav>
+    <span class="status">{{if eq .Reporting .Total}}[x]{{else}}[!]{{end}} {{.Reporting}} of {{.Total}} machines reporting · last point {{.LastPoint}} · {{.StepLabel}}</span>
+  </div>
+{{end}}
+
+{{define "bottom"}}
+  <footer>doinspect {{.Version}} · {{.Series}} series · this page refreshes every 30 s</footer>
+</div>
+</body>
+</html>
+{{end}}
+
+{{define "ctrtable"}}
+<div class="table-wrap">
+  <table>
+    <thead><tr><th>Container</th><th class="num">CPU</th><th class="num sorted">RAM ↓</th><th>RAM share</th><th class="num">In / out</th><th>CPU trend</th><th>RAM trend</th></tr></thead>
+    <tbody>
+    {{range .}}
+      {{if .Gone}}
+      <tr class="gone"><td class="name">{{.Name}}</td><td class="num">-</td><td class="num">{{.RAM}}</td><td><span class="badge bad">[!] missing</span></td><td class="num">last report {{.Since}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
+      {{else}}
+      <tr><td class="name">{{.Name}}</td><td class="num">{{or .CPU "-"}}</td><td class="num">{{.RAM}}</td>
+        <td class="share"><div class="meter"><i style="width:{{.RAMShare}}%"></i></div></td>
+        <td class="num">{{if .RX}}{{.RX}} / {{.TX}}{{else}}-{{end}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
+      {{end}}
+    {{else}}
+      <tr><td colspan="7" class="empty">[ ] No containers yet. They show once containers.txt and two readings are in.</td></tr>
+    {{end}}
+    </tbody>
+  </table>
+</div>
+{{end}}

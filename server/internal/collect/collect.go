@@ -8,6 +8,7 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
+	"runtime/debug"
 	"sort"
 	"sync"
 	"time"
@@ -180,5 +181,8 @@ func (c *Collector) save() {
 		c.Log.Error("snapshot failed", "err", err)
 		return
 	}
+	// Hand the encoder's buffers back to the system at once; otherwise the process keeps them
+	// until the next collection and the container shows several times its working size.
+	debug.FreeOSMemory()
 	c.Log.Debug("snapshot written", "bytes", n)
 }

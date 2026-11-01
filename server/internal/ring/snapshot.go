@@ -29,20 +29,22 @@ const snapVersion = 1
 // Save writes the store and extra to path through a temporary file and a rename, so a crash
 // leaves the previous snapshot whole. It returns the file size.
 func (s *Store) Save(path string, extra map[string]time.Time) (int64, error) {
-	s.mu.RLock()
-	snap := snapshot{Version: snapVersion, Interval: s.interval, N: s.n, Series: make(map[string]snapSeries, len(s.series)), Extra: extra}
-	for k, r := range s.series {
-		snap.Series[k] = snapSeries{Head: r.head, Vals: append([]float32(nil), r.vals...)}
-	}
-	s.mu.RUnlock()
-
 	tmp, err := os.CreateTemp(filepath.Dir(path), ".snap-*")
 	if err != nil {
 		return 0, err
 	}
 	defer os.Remove(tmp.Name())
+	// The rings are encoded in place under the read lock instead of copied first: a copy doubled
+	// the memory every minute (28 MB for 177 series). Put waits for the encoding, about 0.1 s.
 	w := bufio.NewWriterSize(tmp, 1<<20)
-	if err := gob.NewEncoder(w).Encode(snap); err != nil {
+	s.mu.RLock()
+	snap := snapshot{Version: snapVersion, Interval: s.interval, N: s.n, Series: make(map[string]snapSeries, len(s.series)), Extra: extra}
+	for k, r := range s.series {
+		snap.Series[k] = snapSeries{Head: r.head, Vals: r.vals}
+	}
+	err = gob.NewEncoder(w).Encode(snap)
+	s.mu.RUnlock()
+	if err != nil {
 		tmp.Close()
 		return 0, err
 	}

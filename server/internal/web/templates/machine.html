@@ -1,0 +1,9 @@
+{{template "top" .}}
+  <section class="detail">
+  {{range .Body}}
+    <article class="card"><div class="mini"><span class="k"><span>{{.Title}}</span><b>{{.Now}}</b></span>{{.Chart}}</div></article>
+  {{else}}
+    <p class="empty">[ ] No figures from this machine yet.</p>
+  {{end}}
+  </section>
+{{template "bottom" .}}
