@@ -1,0 +1,14 @@
+.DS_Store
+
+# Builds
+server/doinspect
+server/.tmpbin/
+*.test
+
+# Local data
+*.snap
+
+# Never commit secrets
+.env
+*.kdbx
+*.token

@@ -1,0 +1,53 @@
+# HELP node_boot_time_seconds Node boot time, in unixtime.
+# TYPE node_boot_time_seconds gauge
+node_boot_time_seconds 1.7619e+09
+# HELP node_cpu_seconds_total Seconds the CPUs spent in each mode.
+# TYPE node_cpu_seconds_total counter
+node_cpu_seconds_total{cpu="0",mode="idle"} 900
+node_cpu_seconds_total{cpu="0",mode="iowait"} 10
+node_cpu_seconds_total{cpu="0",mode="system"} 40
+node_cpu_seconds_total{cpu="0",mode="user"} 50
+node_cpu_seconds_total{cpu="1",mode="idle"} 950
+node_cpu_seconds_total{cpu="1",mode="iowait"} 0
+node_cpu_seconds_total{cpu="1",mode="system"} 20
+node_cpu_seconds_total{cpu="1",mode="user"} 30
+# TYPE node_cpu_scaling_frequency_hertz gauge
+node_cpu_scaling_frequency_hertz{cpu="0"} 1.5e+09
+node_cpu_scaling_frequency_hertz{cpu="1"} 1.8e+09
+# TYPE node_disk_read_bytes_total counter
+node_disk_read_bytes_total{device="mmcblk0"} 1000
+node_disk_read_bytes_total{device="loop0"} 5
+# TYPE node_disk_written_bytes_total counter
+node_disk_written_bytes_total{device="mmcblk0"} 2000
+# TYPE node_filesystem_avail_bytes gauge
+node_filesystem_avail_bytes{device="/dev/mmcblk0p2",fstype="ext4",mountpoint="/"} 2.5e+10
+node_filesystem_avail_bytes{device="tmpfs",fstype="tmpfs",mountpoint="/run"} 1e+08
+# TYPE node_filesystem_size_bytes gauge
+node_filesystem_size_bytes{device="/dev/mmcblk0p2",fstype="ext4",mountpoint="/"} 1e+11
+node_filesystem_size_bytes{device="tmpfs",fstype="tmpfs",mountpoint="/run"} 2e+08
+# TYPE node_load1 gauge
+node_load1 0.71
+# TYPE node_load15 gauge
+node_load15 0.58
+# TYPE node_load5 gauge
+node_load5 0.64
+# TYPE node_memory_Buffers_bytes gauge
+node_memory_Buffers_bytes 1e+08
+# TYPE node_memory_Cached_bytes gauge
+node_memory_Cached_bytes 9e+08
+# TYPE node_memory_MemAvailable_bytes gauge
+node_memory_MemAvailable_bytes 2.5e+09
+# TYPE node_memory_MemTotal_bytes gauge
+node_memory_MemTotal_bytes 8e+09
+# TYPE node_memory_SwapFree_bytes gauge
+node_memory_SwapFree_bytes 1e+08
+# TYPE node_memory_SwapTotal_bytes gauge
+node_memory_SwapTotal_bytes 1e+08
+# TYPE node_network_receive_bytes_total counter
+node_network_receive_bytes_total{device="br0"} 5000
+node_network_receive_bytes_total{device="lo"} 99
+node_network_receive_bytes_total{device="vnet0"} 77
+# TYPE node_network_transmit_bytes_total counter
+node_network_transmit_bytes_total{device="br0"} 6000
+# TYPE node_thermal_zone_temp gauge
+node_thermal_zone_temp{type="cpu-thermal",zone="0"} 54.5

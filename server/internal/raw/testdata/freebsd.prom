@@ -1,0 +1,21 @@
+# TYPE node_cpu_seconds_total counter
+node_cpu_seconds_total{cpu="0",mode="idle"} 500
+node_cpu_seconds_total{cpu="0",mode="user"} 20
+node_cpu_seconds_total{cpu="0",mode="system"} 30
+# TYPE node_memory_size_bytes gauge
+node_memory_size_bytes 1.073741824e+09
+# TYPE node_memory_free_bytes gauge
+node_memory_free_bytes 2e+08
+# TYPE node_memory_inactive_bytes gauge
+node_memory_inactive_bytes 1e+08
+# TYPE node_memory_cache_bytes gauge
+node_memory_cache_bytes 5e+07
+# TYPE node_memory_swap_size_bytes gauge
+node_memory_swap_size_bytes 0
+# TYPE node_memory_swap_used_bytes gauge
+node_memory_swap_used_bytes 0
+# TYPE node_network_receive_bytes_total counter
+node_network_receive_bytes_total{device="vtnet0"} 123
+node_network_receive_bytes_total{device="pflog0"} 1
+# TYPE node_load1 gauge
+node_load1 0.08

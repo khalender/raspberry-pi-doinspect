@@ -1,0 +1,10 @@
+github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 h1:C3w9PqII01/Oq1c1nUAm88MOHcQC9l5mIlSMApZMrHA=
+github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822/go.mod h1:+n7T8mK8HuQTcFwEeznm/DIxMOiR9yIdICNftLE1DvQ=
+github.com/pandatix/go-abnf v0.5.3 h1:LA9AaxAqwzdxfDe7+HIGUB6tzx2N6wYVEAChmfsoPgo=
+github.com/pandatix/go-abnf v0.5.3/go.mod h1:AE0KD3/VNoCjGzc1gqetRKshbI4SYErXQ/8kPenR5mc=
+github.com/prometheus/client_model v0.6.3 h1:O0jaTVAYNxTHYInEPFJt5I3+sN8zqBtVMPTB1qyxiEo=
+github.com/prometheus/client_model v0.6.3/go.mod h1:gpN5P9S7Rr6Yr92PiQ+Ixvhf6JZEkF1dnxsYL2aPBEM=
+github.com/prometheus/common v0.73.1 h1:SZWh/j4AvhCdhX8jvYSnxvPxhWlC9QZkjJ+tOrEr7kU=
+github.com/prometheus/common v0.73.1/go.mod h1:I9aA/Ukz9s1olOobh8KtCkU7B1mQPQsB9UvQPsUQ1Dk=
+google.golang.org/protobuf v1.36.12 h1:pJOKDDOyeXErUroCihFAd5LQuwXBSpVnKGrj5o/fwxc=
+google.golang.org/protobuf v1.36.12/go.mod h1:HTf+CrKn2C3g5S8VImy6tdcUvCska2kB7j23XfzDpco=
