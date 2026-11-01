@@ -21,6 +21,7 @@ type Config struct {
 	LocalName string   // name of the machine doinspect runs on; empty reads no local figures
 	Proc, Sys string   // that machine's /proc and /sys, mounted read-only
 	FS        []string // paths whose file system to report for that machine
+	Names     string   // container id and name list, written by a cron job on that machine (D5)
 }
 
 // FromEnv builds a Config from getenv (os.Getenv in production).
@@ -48,6 +49,7 @@ func FromEnv(getenv func(string) string) (Config, error) {
 		LocalName: str("DOINSPECT_LOCAL", "docker-vm"),
 		Proc:      str("DOINSPECT_PROC", "/host/proc"),
 		Sys:       str("DOINSPECT_SYS", "/host/sys"),
+		Names:     str("DOINSPECT_NAMES", "/data/containers.txt"),
 	}
 	if getenv("DOINSPECT_LOCAL") == "-" {
 		c.LocalName = ""

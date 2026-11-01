@@ -16,6 +16,8 @@ import (
 type Local struct {
 	Proc, Sys string
 	FS        []string
+	Names     *Names // container names; nil shows short ids
+	Pids      *Pids  // one process per container, kept between readings; may be nil
 }
 
 // userHZ is the tick length of /proc/stat on every Linux doinspect runs on.
@@ -34,6 +36,7 @@ func (l Local) Read(t time.Time) (*Raw, error) {
 	l.netdev(r)
 	l.thermal(r)
 	l.freq(r)
+	l.containers(r)
 	for _, p := range l.FS {
 		if s, ok := statfs(p); ok {
 			r.FS[p] = s

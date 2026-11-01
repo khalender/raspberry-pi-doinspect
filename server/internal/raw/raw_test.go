@@ -2,6 +2,7 @@ package raw
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -93,5 +94,52 @@ func TestLocal(t *testing.T) {
 func TestLocalWrongMount(t *testing.T) {
 	if _, err := (Local{Proc: "testdata/none"}).Read(t0); err == nil {
 		t.Fatal("no error for a missing /proc")
+	}
+}
+
+// TestContainers reads three containers under both cgroup drivers: RAM without inactive file cache,
+// traffic of all interfaces but lo from the first process, a name from containers.txt, and the
+// short id for a container the file does not list yet. The three /proc/<pid>/cgroup forms: systemd,
+// systemd seen from another cgroup namespace, and cgroupfs seen from one.
+func TestContainers(t *testing.T) {
+	r, err := Local{Proc: "testdata/proc", Sys: "testdata/sys", Names: &Names{Path: "testdata/containers.txt"}}.Read(t0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Containers) != 3 {
+		t.Fatalf("containers %v", r.Containers)
+	}
+	g := r.Containers["gitea"]
+	if g.CPUSec != 30 || g.RAM != 104857600 || !g.HasNet || g.Net != (IO{73000, 84000}) || !g.NameSeen {
+		t.Fatalf("gitea %+v", g)
+	}
+	if d := r.Containers["doquiz-server"]; d.RAM != 9437184 || d.Net.In != 100 {
+		t.Fatalf("doquiz-server %+v", d)
+	}
+	if c, ok := r.Containers["cccccccccccc"]; !ok || c.NameSeen || c.Net.In != 500 || c.CPUSec != 0.5 {
+		t.Fatalf("unnamed container %+v %v", c, ok)
+	}
+	if n, ok := (*Names)(nil).Name("dddddddddddddddd"); ok || n != "dddddddddddd" {
+		t.Fatalf("nil names: %q %v", n, ok)
+	}
+}
+
+// TestNamesReload: the cron job rewrites the file; the new name shows on the next read.
+func TestNamesReload(t *testing.T) {
+	path := t.TempDir() + "/containers.txt"
+	id := strings.Repeat("e", 64)
+	os.WriteFile(path, []byte(id+" old-name\n"), 0o644)
+	n := &Names{Path: path}
+	if name, _ := n.Name(id); name != "old-name" {
+		t.Fatalf("first %q", name)
+	}
+	os.WriteFile(path, []byte(id+" new-name\n"), 0o644)
+	os.Chtimes(path, time.Now().Add(time.Minute), time.Now().Add(time.Minute))
+	if name, _ := n.Name(id); name != "new-name" {
+		t.Fatalf("after rewrite %q", name)
+	}
+	os.Remove(path)
+	if name, ok := n.Name(id); name != "new-name" || !ok {
+		t.Fatalf("file gone: keeps the last list, got %q %v", name, ok)
 	}
 }

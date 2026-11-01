@@ -47,6 +47,9 @@ func (m *Machine) Next(cur *raw.Raw, gap float64) []Sample {
 	add("uptime", float64(cur.Time.Unix())-cur.BootTime)
 	add("temp", cur.TempC)
 	add("freq", cur.FreqHz/1e6)
+	for _, name := range keys(cur.Containers) {
+		add("ctr["+name+"].ram", cur.Containers[name].RAM)
+	}
 
 	prev := m.prev
 	m.prev = cur
@@ -75,6 +78,23 @@ func (m *Machine) Next(cur *raw.Raw, gap float64) []Sample {
 	rate := func(name string, c, p float64) {
 		if c >= p {
 			add(name, (c-p)/dt)
+		}
+	}
+	// A container's CPU is its share of the whole machine, like the machine's own figure, so the
+	// containers add up to at most the machine's CPU.
+	cores := float64(len(cur.CPU))
+	for _, name := range keys(cur.Containers) {
+		c := cur.Containers[name]
+		p, ok := prev.Containers[name]
+		if !ok {
+			continue
+		}
+		if cores > 0 && c.CPUSec >= p.CPUSec {
+			add("ctr["+name+"].cpu", 100*(c.CPUSec-p.CPUSec)/dt/cores)
+		}
+		if c.HasNet && p.HasNet {
+			rate("ctr["+name+"].rx", c.Net.In, p.Net.In)
+			rate("ctr["+name+"].tx", c.Net.Out, p.Net.Out)
 		}
 	}
 	for _, d := range keys(cur.Disk) {

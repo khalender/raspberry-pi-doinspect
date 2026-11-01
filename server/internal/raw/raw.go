@@ -24,6 +24,8 @@ type Raw struct {
 	FS   map[string]Space // by mount point
 	Net  map[string]IO    // by interface: bytes received and sent since boot
 
+	Containers map[string]Container // by name; only for the machine doinspect runs on
+
 	BootTime float64 // Unix seconds
 	TempC    float64 // the hottest sensor
 	FreqHz   float64 // average CPU clock
@@ -42,7 +44,7 @@ type Space struct{ Size, Avail float64 }
 func New(t time.Time) *Raw {
 	nan := math.NaN()
 	return &Raw{
-		Time: t, CPU: map[string]CPUTimes{}, Disk: map[string]IO{}, FS: map[string]Space{}, Net: map[string]IO{},
+		Time: t, CPU: map[string]CPUTimes{}, Disk: map[string]IO{}, FS: map[string]Space{}, Net: map[string]IO{}, Containers: map[string]Container{},
 		MemTotal: nan, MemAvailable: nan, MemCached: nan, SwapTotal: nan, SwapFree: nan,
 		Load1: nan, Load5: nan, Load15: nan, BootTime: nan, TempC: nan, FreqHz: nan,
 	}

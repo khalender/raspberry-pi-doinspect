@@ -52,7 +52,7 @@ func run(log *slog.Logger) error {
 		Log:      log,
 	}
 	if cfg.LocalName != "" {
-		col.Local = &raw.Local{Proc: cfg.Proc, Sys: cfg.Sys, FS: cfg.FS}
+		col.Local = &raw.Local{Proc: cfg.Proc, Sys: cfg.Sys, FS: cfg.FS, Names: &raw.Names{Path: cfg.Names}, Pids: &raw.Pids{}}
 	}
 	col.Restore()
 

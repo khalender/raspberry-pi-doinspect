@@ -65,3 +65,30 @@ func TestRates(t *testing.T) {
 		t.Fatalf("rx after the gap %v", v)
 	}
 }
+
+// TestContainerRates: a container's CPU is its share of the whole machine (2 cores here); a
+// recreated container, whose counters start again, gives no rate once.
+func TestContainerRates(t *testing.T) {
+	at := func(sec int, cpu, rx float64) *raw.Raw {
+		r := reading(sec, 0, float64(sec)*2, 0)
+		r.CPU["1"] = raw.CPUTimes{Total: float64(sec) * 2}
+		r.Containers["gitea"] = raw.Container{CPUSec: cpu, RAM: 5e7, Net: raw.IO{In: rx}, HasNet: true}
+		return r
+	}
+	var m Machine
+	if ss := m.Next(at(0, 10, 0), 45); !has(ss, "ctr[gitea].ram") || has(ss, "ctr[gitea].cpu") {
+		t.Fatalf("first %v", ss)
+	}
+	ss := m.Next(at(15, 13, 3000), 45)
+	if v, _ := find(ss, "ctr[gitea].cpu"); v != 10 {
+		t.Fatalf("cpu %v, want 10 (3 s of 30 core-seconds)", v)
+	}
+	if v, _ := find(ss, "ctr[gitea].rx"); v != 200 {
+		t.Fatalf("rx %v", v)
+	}
+	if ss := m.Next(at(30, 0.2, 10), 45); has(ss, "ctr[gitea].cpu") || has(ss, "ctr[gitea].rx") {
+		t.Fatalf("rate across a recreate: %v", ss)
+	}
+}
+
+func has(ss []Sample, name string) bool { _, ok := find(ss, name); return ok }
