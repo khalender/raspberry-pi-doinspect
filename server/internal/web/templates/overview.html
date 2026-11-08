@@ -16,6 +16,17 @@
   {{else}}
     <p class="empty">[ ] No machines set up. Set DOINSPECT_TARGETS or DOINSPECT_LOCAL.</p>
   {{end}}
+  {{with .Body.Net}}
+    <article class="card">
+      <div class="card-head"><h2><a href="/network?range={{$.Range.Name}}">network →</a></h2>{{if .Has}}{{if .Err}}<span class="badge bad">[!] last test failed</span>{{else}}<span class="badge ok">[x] tested {{.When}}</span>{{end}}{{end}}</div>
+      <span class="meta">{{or .ISP "provider known after the first speed test"}}</span>
+      <div class="figures">
+        <div class="fig"><span class="k">Download</span><span class="v">{{or .Down "-"}}</span></div>
+        <div class="fig"><span class="k">Upload</span><span class="v">{{or .Up "-"}}</span></div>
+        <div class="fig"><span class="k">Ping</span><span class="v s">{{or .GatewayRTT "-"}}</span></div>
+      </div>
+    </article>
+  {{end}}
   </section>
 
   <section class="section">

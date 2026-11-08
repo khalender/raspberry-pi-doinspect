@@ -15,15 +15,17 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+	_ "time/tzdata" // the scratch image has no zone files; TZ picks the speed test's local times
 
 	"doinspect/server/internal/collect"
 	"doinspect/server/internal/config"
+	"doinspect/server/internal/netcheck"
 	"doinspect/server/internal/raw"
 	"doinspect/server/internal/ring"
 	"doinspect/server/internal/web"
 )
 
-var version = "0.1.0" // set with -ldflags "-X main.version=..."
+var version = "0.2.2" // set with -ldflags "-X main.version=..."
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {
@@ -62,12 +64,39 @@ func run(log *slog.Logger) error {
 	done := make(chan struct{})
 	go func() { col.Run(ctx); close(done) }()
 
+	nc := &netcheck.Checker{Ping: cfg.Ping, DNS: cfg.DNS, DNSName: cfg.DNSName, Store: col.Store, Pinger: netcheck.ICMP{},
+		Every: cfg.SpeedEvery, At: cfg.SpeedAt, Keep: 30 * 24 * time.Hour, Path: filepath.Join(cfg.DataDir, "speedtest.json"), Log: log}
+	if cfg.SpeedEvery > 0 {
+		nc.Speed = &netcheck.Speed{Base: cfg.SpeedURL, ISPURL: cfg.SpeedISPURL, Bytes: cfg.SpeedBytes, Streams: 4, Limit: 120 * time.Second,
+			Client: &http.Client{Timeout: 120 * time.Second}, Ping: nc.PingOnce(cfg.SpeedPingName)}
+	}
+	go nc.Run(ctx)
+	go nc.RunSpeed(ctx)
+	var netView *web.Network
+	if len(cfg.Ping) > 0 || len(cfg.DNS) > 0 || nc.Speed != nil {
+		netView = &web.Network{Ping: cfg.Ping, DNS: cfg.DNS, Errors: nc.Errors, CPUOf: cfg.SpeedCPU, DNSName: cfg.DNSName, Keep: nc.Keep,
+			Results: func() []netcheck.Result { return nil }, Running: func() bool { return false }, Next: func() time.Time { return time.Time{} }}
+		if s := nc.Speed; s != nil {
+			netView.Results, netView.Running = s.Results, s.Running
+			netView.Next = func() time.Time { return netcheck.NextSlot(time.Now(), cfg.SpeedAt, cfg.SpeedEvery) }
+		}
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version, "machines": col.Statuses(), "series": len(col.Store.Keys())})
+		json.NewEncoder(w).Encode(map[string]any{"status": "ok", "version": version, "machines": col.Statuses(), "series": len(col.Store.Keys()), "network_errors": nc.Errors()})
 	})
-	(&web.Server{Store: col.Store, Statuses: col.Statuses, Now: time.Now, Version: version, Log: log}).Register(mux)
+	(&web.Server{Store: col.Store, Statuses: col.Statuses, Now: time.Now, Version: version, Log: log, Net: netView}).Register(mux)
+	// The speed tests of the last 30 days, oldest first.
+	mux.HandleFunc("GET /api/speedtest", func(w http.ResponseWriter, r *http.Request) {
+		out := []netcheck.Result{}
+		if nc.Speed != nil {
+			out = append(out, nc.Speed.Results()...)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(out)
+	})
 	// The newest point of every series, for checks and scripts.
 	mux.HandleFunc("GET /api/last", func(w http.ResponseWriter, r *http.Request) {
 		out := map[string]float64{}
@@ -83,7 +112,8 @@ func run(log *slog.Logger) error {
 	errc := make(chan error, 1)
 	go func() { errc <- hs.ListenAndServe() }()
 	log.Info("listening", "addr", cfg.Listen, "version", version, "interval", cfg.Interval.String(), "keep", cfg.Keep.String(),
-		"targets", len(cfg.Targets), "local", cfg.LocalName)
+		"targets", len(cfg.Targets), "local", cfg.LocalName,
+		"ping", len(cfg.Ping), "dns", len(cfg.DNS), "speedtest_every", cfg.SpeedEvery.String())
 
 	select {
 	case err := <-errc:

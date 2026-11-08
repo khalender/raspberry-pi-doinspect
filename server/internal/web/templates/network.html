@@ -1,0 +1,93 @@
+{{template "top" .}}
+  {{with .Body}}
+  <section class="machines">
+    <article class="card">
+      <div class="card-head"><h2>Internet provider</h2>{{if .ISP}}<span class="badge ok">{{.ASN}}</span>{{end}}</div>
+      {{if .ISP}}
+      <div class="figures">
+        <div class="fig wide"><span class="k">Provider</span><span class="v s">{{.ISP}}</span></div>
+        <div class="fig"><span class="k">Public address</span><span class="v s">{{.IP}}</span></div>
+        <div class="fig"><span class="k">Cloudflare site</span><span class="v s">{{or .Site "-"}}</span></div>
+      </div>
+      <span class="meta">same provider and address since {{.ISPSince}}</span>
+      {{else}}
+      <span class="meta">[ ] Known after the first speed test{{with .Next}}, {{.}}{{end}}.</span>
+      {{end}}
+    </article>
+    <article class="card">
+      <div class="card-head"><h2>Latest speed test</h2>{{if .Running}}<span class="badge ok">[~] running</span>{{else if .Latest}}{{if .Latest.Err}}<span class="badge bad">[!] failed</span>{{else}}<span class="badge ok">[x] done</span>{{end}}{{end}}</div>
+      {{with .Latest}}
+      <div class="figures">
+        <div class="fig"><span class="k">Download</span><span class="v">{{.Down}}</span></div>
+        <div class="fig"><span class="k">Upload</span><span class="v">{{.Up}}</span></div>
+        <div class="fig"><span class="k">Latency idle</span><span class="v s">{{.Idle}}</span></div>
+        <div class="fig"><span class="k">Latency under load</span><span class="v s">{{.Loaded}}</span></div>
+      </div>
+      <span class="meta">{{.When}}{{if ne .CPU "-"}} · Pi host CPU peak {{.CPU}}{{end}}{{with .Err}} · {{.}}{{end}}</span>
+      {{else}}
+      <span class="meta">[ ] No speed test yet.</span>
+      {{end}}
+      {{with .Next}}<span class="meta">next test {{.}}</span>{{end}}
+    </article>
+  </section>
+
+  <section class="section">
+    {{with .Since}}<p class="note">[i] Measured since {{.}}. The charts fill only their right part until the range is covered; pick a shorter range to see more detail.</p>{{end}}
+    <div class="section-head"><h2>Ping</h2><span>10 echo requests per target every {{.Every}}</span></div>
+    <div class="detail">
+    {{range .Pings}}
+      <article class="card">
+        <div class="card-head"><h2>{{.Name}}</h2><span class="meta">{{.Addr}}</span></div>
+        <div class="mini"><span class="k"><span>Ping (round trip)</span><b>now {{.Now}}{{with .RTTPeak}} · {{.}}{{end}}</b></span>{{.RTT}}</div>
+        <div class="pair">
+          <div class="mini"><span class="k"><span>Jitter</span><b>{{.JitNow}}</b></span>{{.Jitter}}</div>
+          <div class="mini"><span class="k"><span>Loss</span><b>{{.LNow}}</b></span>{{.Loss}}</div>
+        </div>
+        {{with .Err}}<span class="badge bad">[!] {{.}}</span>{{end}}
+      </article>
+    {{else}}
+      <p class="empty">[ ] No ping targets. Set DOINSPECT_PING.</p>
+    {{end}}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>DNS</h2><span>one lookup of {{.DNSName}} per server every {{.Every}}</span></div>
+    <div class="detail">
+    {{range .DNS}}
+      <article class="card">
+        <div class="card-head"><h2>{{.Name}}</h2><span class="meta">{{.Addr}}</span></div>
+        <div class="mini"><span class="k"><span>Lookup time</span><b>now {{.Now}}{{with .RTTPeak}} · {{.}}{{end}}</b></span>{{.RTT}}</div>
+        <div class="mini"><span class="k"><span>Failed lookups in this range</span><b>{{or .Fails "-"}}</b></span></div>
+        {{with .Err}}<span class="badge bad">[!] {{.}}</span>{{end}}
+      </article>
+    {{else}}
+      <p class="empty">[ ] No DNS servers. Set DOINSPECT_DNS.</p>
+    {{end}}
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="section-head"><h2>Speed tests</h2><span>last {{.Keep}}, newest first</span></div>
+    {{if .Tests}}
+    <div class="detail">
+      <article class="card"><div class="mini"><span class="k"><span>Download per test</span></span>{{.DownChart}}</div></article>
+      <article class="card"><div class="mini"><span class="k"><span>Upload per test</span></span>{{.UpChart}}</div></article>
+    </div>
+    {{end}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Started</th><th class="num">Down</th><th class="num">Up</th><th class="num">Idle</th><th class="num">Loaded</th><th class="num">Pi CPU</th><th>Provider</th><th>Address</th><th>Result</th></tr></thead>
+        <tbody>
+        {{range .Tests}}
+          <tr><td class="name">{{.When}}</td><td class="num">{{.Down}}</td><td class="num">{{.Up}}</td><td class="num">{{.Idle}}</td><td class="num">{{.Loaded}}</td><td class="num">{{.CPU}}</td>
+            <td>{{or .ISP "-"}}</td><td>{{or .IP "-"}}{{if .Changed}} <span class="badge bad">changed</span>{{end}}</td><td>{{if .Err}}<span class="badge bad">[!] {{.Err}}</span>{{else}}[x] ok{{end}}</td></tr>
+        {{else}}
+          <tr><td colspan="9" class="empty">[ ] No speed test yet.{{with $.Body.Next}} The first runs {{.}}.{{end}}</td></tr>
+        {{end}}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {{end}}
+{{template "bottom" .}}

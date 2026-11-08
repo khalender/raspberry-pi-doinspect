@@ -44,7 +44,10 @@ h2 a:hover { text-decoration: underline; }
 .figures { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
 .fig { display: grid; gap: 4px; align-content: start; }
 .fig .v { color: var(--ink); font-size: 22px; font-weight: 700; line-height: 1.2; }
-.fig .v.s { font-size: 16px; }
+.fig .v.s { font-size: 16px; overflow-wrap: anywhere; }
+.fig.wide { grid-column: 1 / -1; }
+.note { margin: 0; padding: 12px 16px; border: 1px solid var(--hairline-strong); background: var(--surface-soft); color: var(--text-body); }
+.pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
 .fig .v small { font-size: 14px; font-weight: 400; color: var(--text-mute); }
 .meter { height: 8px; background: var(--surface-card); box-shadow: var(--inset); border: 1px solid var(--hairline); }
 .meter > i { display: block; height: 100%; max-width: 100%; background: var(--ink); }

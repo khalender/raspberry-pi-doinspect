@@ -31,6 +31,7 @@ type Server struct {
 	Now      func() time.Time
 	Version  string
 	Log      *slog.Logger
+	Net      *Network // nil without network checks
 
 	tmpl *template.Template
 }
@@ -58,9 +59,14 @@ func (s *Server) Register(mux *http.ServeMux) {
 	static, _ := fs.Sub(staticFS, "static")
 	files := http.FileServer(http.FS(static))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))
+	// Browsers and tools that ask for /favicon.ico without reading the page get the same icon.
+	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/static/icon.svg", http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("GET /{$}", s.overview)
 	mux.HandleFunc("GET /containers", s.containers)
 	mux.HandleFunc("GET /machine/{name}", s.machine)
+	mux.HandleFunc("GET /network", s.network)
 }
 
 func cacheFor(h http.Handler, d time.Duration) http.Handler {
@@ -81,6 +87,7 @@ type page struct {
 	Reporting, Total   int
 	LastPoint          string
 	Version            string
+	HasNet             bool
 	Series             int
 	Body               any
 }
@@ -100,7 +107,7 @@ func (s *Server) base(r *http.Request, title, crumb, nav string) (page, Range, i
 	}
 	from := to - n + 1
 	step := (int(n) + points - 1) / points
-	p := page{Title: title, Crumb: crumb, Path: r.URL.Path, Range: rg, Ranges: ranges, Nav: nav, Version: s.Version, Series: len(s.Store.Keys()),
+	p := page{Title: title, Crumb: crumb, Path: r.URL.Path, Range: rg, Ranges: ranges, Nav: nav, Version: s.Version, Series: len(s.Store.Keys()), HasNet: s.Net != nil,
 		StepLabel: "one point per " + every(time.Duration(step)*s.Store.Interval()) + map[bool]string{true: "", false: " (average, band = peak)"}[step == 1]}
 	var newest time.Time
 	for _, st := range s.Statuses() {
@@ -243,13 +250,14 @@ type overviewBody struct {
 	Cards      []card
 	Containers []ctrRow
 	More       int
+	Net        *netCard
 }
 
 func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
 	p, rg, from, to := s.base(r, "Pi setup load", "doinspect / overview", "overview")
 	p.Lead = "Every machine and container, one point every " + every(s.Store.Interval()) + ", kept " + keepLabel(s.Store) + "."
 	rows := s.ctrRows(rg, from, to)
-	body := overviewBody{Cards: s.cards(rg, from, to), Containers: rows}
+	body := overviewBody{Cards: s.cards(rg, from, to), Containers: rows, Net: s.netCard()}
 	if len(rows) > 8 {
 		body.Containers, body.More = rows[:8], len(rows)-8
 	}

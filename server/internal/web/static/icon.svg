@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- doinspect: a load line in a Neo-Skeuo card (ink #201d1d on canvas #fdfcfc, hard offset shadow) -->
+  <rect x="4" y="4" width="27" height="27" fill="#201d1d"/>
+  <rect x="1" y="1" width="27" height="27" fill="#fdfcfc" stroke="#201d1d" stroke-width="2"/>
+  <polyline points="5,19 9,19 12,10 16,24 19,14 22,19 25,19" fill="none" stroke="#201d1d" stroke-width="3" stroke-linejoin="miter" stroke-linecap="square"/>
+</svg>

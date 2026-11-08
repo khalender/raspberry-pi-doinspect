@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"doinspect/server/internal/collect"
+	"doinspect/server/internal/config"
+	"doinspect/server/internal/netcheck"
 	"doinspect/server/internal/ring"
 )
 
@@ -129,6 +131,15 @@ func TestPages(t *testing.T) {
 	if code, _ := f.get(t, "/static/style.css"); code != 200 {
 		t.Fatalf("css %d", code)
 	}
+	if code, body := f.get(t, "/static/icon.svg"); code != 200 || !strings.HasPrefix(body, "<svg") {
+		t.Fatalf("icon %d", code)
+	}
+	if code, _ := f.get(t, "/favicon.ico"); code != 301 {
+		t.Fatalf("favicon.ico %d", code)
+	}
+	if _, body := f.get(t, "/"); !strings.Contains(body, `rel="icon" href="/static/icon.svg"`) {
+		t.Fatal("page does not link the icon")
+	}
 }
 
 func between2(s, a, b string) string {
@@ -141,4 +152,82 @@ func between2(s, a, b string) string {
 		return s[i:]
 	}
 	return s[i : i+j]
+}
+
+func TestNetworkPage(t *testing.T) {
+	f := newFixture(t)
+	if code, _ := f.get(t, "/network"); code != 404 {
+		t.Fatalf("network page without checks: %d", code)
+	}
+	if _, body := f.get(t, "/"); strings.Contains(body, "network →") {
+		t.Fatal("overview shows a network card without checks")
+	}
+	now := f.srv.Now()
+	var results []netcheck.Result
+	f.srv.Net = &Network{
+		Ping:    []config.Target{{Name: "gateway", URL: "192.0.2.1"}, {Name: "isp", URL: "198.51.100.1"}},
+		DNS:     []config.Target{{Name: "pihole", URL: "192.0.2.53:53"}},
+		Results: func() []netcheck.Result { return results },
+		Running: func() bool { return false },
+		Next:    func() time.Time { return now.Add(3 * time.Hour) },
+		Errors:  func() map[string]string { return map[string]string{"ping isp": "unreachable"} },
+		CPUOf:   "pi-host",
+		DNSName: "cloudflare.com",
+		Keep:    30 * 24 * time.Hour,
+	}
+	// No data yet: the page and the card still render.
+	code, body := f.get(t, "/network")
+	if code != 200 || !strings.Contains(body, "Known after the first speed test") || !strings.Contains(body, "No speed test yet") {
+		t.Fatalf("empty network page %d", code)
+	}
+	if _, body := f.get(t, "/"); !strings.Contains(body, "network →") || !strings.Contains(body, "provider known after the first speed test") {
+		t.Fatal("overview lacks the empty network card")
+	}
+
+	end := f.srv.Store.Slot(now)
+	for slot := end - 5760; slot <= end; slot++ {
+		f.srv.Store.Put("net/ping[gateway].rtt", slot, 1.2)
+		f.srv.Store.Put("net/ping[gateway].jitter", slot, 0.3)
+		f.srv.Store.Put("net/ping[gateway].loss", slot, 0)
+		f.srv.Store.Put("net/dns[pihole].ms", slot, 4)
+		f.srv.Store.Put("net/dns[pihole].fail", slot, float64(slot%10/9)) // one in ten fails
+	}
+	r := func(h int, ip string, down float64, err string) netcheck.Result {
+		st := now.Add(-time.Duration(h) * time.Hour)
+		return netcheck.Result{Start: st, End: st.Add(20 * time.Second), ISP: "EXAMPLE-AS Example ISP", ASN: 64500, IP: ip, Site: "BRU",
+			Down: down, Up: down / 5, Idle: 3.1, Loaded: 25, BytesDown: 1e8, BytesUp: 1e8, Err: err}
+	}
+	results = []netcheck.Result{r(18, "192.0.2.44", 480e6, ""), r(12, "192.0.2.44", 470e6, "time limit 2m0s reached"), r(6, "192.0.2.99", 495e6, "")}
+	code, body = f.get(t, "/network")
+	if code != 200 {
+		t.Fatalf("network page %d", code)
+	}
+	for _, want := range []string{"EXAMPLE-AS Example ISP", "AS64500", "192.0.2.99", "495 Mbit/s", "99.0 Mbit/s", "3.1 ms", "25 ms",
+		">gateway<", "192.0.2.1", "Ping (round trip)", "now 1.2 ms", "unreachable", ">pihole<", "192.0.2.53:53", "now 4.0 ms",
+		"Failed lookups in this range", "576 of 5760 (10 %)", "lookup of cloudflare.com", "changed", "time limit 2m0s reached",
+		"next test", `aria-current="page">Network<`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("network page lacks %q", want)
+		}
+	}
+	if strings.Contains(body, "Measured since") {
+		t.Error("a range the data covers shows the measured-since note")
+	}
+	if _, body := f.get(t, "/network?range=7d"); !strings.Contains(body, "Measured since Sat 12:00") {
+		t.Errorf("7d range lacks the measured-since note: %s", between2(body, "note", "</p>"))
+	}
+	// Newest first, and the address change is marked on the newest row only.
+	if i, j := strings.Index(body, "495 Mbit/s</td>"), strings.Index(body, "480 Mbit/s</td>"); i < 0 || j < i {
+		t.Error("speed tests not newest first")
+	}
+	if strings.Count(body, ">changed<") != 1 {
+		t.Errorf("%d changes marked, want 1", strings.Count(body, ">changed<"))
+	}
+	// The Pi host's CPU during the test comes from its ring.
+	if !strings.Contains(body, "Pi host CPU peak") {
+		t.Error("no CPU peak for the latest test")
+	}
+	if _, body := f.get(t, "/"); !strings.Contains(body, "495 Mbit/s") || !strings.Contains(body, "gateway 1.2 ms") {
+		t.Error("overview lacks the latest speed test or the gateway ping")
+	}
 }

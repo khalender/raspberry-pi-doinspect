@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="refresh" content="30">
 <title>{{.Title}} · doinspect</title>
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -18,6 +19,7 @@
     <nav class="group" aria-label="Pages">
       <a href="/?range={{.Range.Name}}"{{if eq .Nav "overview"}} aria-current="page"{{end}}>Overview</a>
       <a href="/containers?range={{.Range.Name}}"{{if eq .Nav "containers"}} aria-current="page"{{end}}>Containers</a>
+      {{if .HasNet}}<a href="/network?range={{.Range.Name}}"{{if eq .Nav "network"}} aria-current="page"{{end}}>Network</a>{{end}}
     </nav>
     <nav class="group" aria-label="Time range">
       {{$cur := .Range.Name}}{{$path := .Path}}{{range .Ranges}}<a href="{{$path}}?range={{.Name}}"{{if eq .Name $cur}} aria-current="true"{{end}}>{{.Name}}</a>{{end}}
