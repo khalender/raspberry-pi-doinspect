@@ -12,3 +12,6 @@ server/.tmpbin/
 .env
 *.kdbx
 *.token
+
+# Throwaway work of this project: prototypes, pictures, backups. Never committed.
+tempwork/
