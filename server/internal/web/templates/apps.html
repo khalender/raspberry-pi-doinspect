@@ -3,7 +3,7 @@
   <div class="card">
     <div class="head"><div><h2>Services</h2><div class="cap">from services.yml in the dashboard repository, checked once a minute</div></div></div>
     {{with .SvcErr}}<div class="err">{{.}}. Showing the last list that loaded.</div>{{end}}
-    {{if .Groups}}<div class="groups">{{template "groups" .Groups}}</div>{{else}}<div class="empty">{{if .HasSvc}}No services yet{{else}}No service list set up (DOINSPECT_SERVICES){{end}}</div>{{end}}
+    {{if .Groups}}{{template "groupsWide" .Groups}}{{else}}<div class="empty">{{if .HasSvc}}No services yet{{else}}No service list set up (DOINSPECT_SERVICES){{end}}</div>{{end}}
   </div>
   <div class="card gap">
     <div class="head"><div><h2>Every container <span class="cnt">{{.Live}}</span></h2><div class="cap">biggest RAM first; CPU is the share of the whole machine</div></div></div>

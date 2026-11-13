@@ -32,6 +32,7 @@ type Service struct {
 	Group       string `yaml:"group"`
 	Note        string `yaml:"note"`
 	Container   string `yaml:"container"` // the container that serves it, if it runs on the Docker VM
+	Icon        string `yaml:"icon"`      // a key of the pixel-art icons (D11); empty picks one by name
 }
 
 // Key is the start of the service's series names.

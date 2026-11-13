@@ -24,7 +24,9 @@ func fill(i int) string { return fills[i%len(fills)] }
 
 type svcItem struct {
 	Name, URL, Host, Description, Note, Container string
+	Icon                                          template.HTML
 	Kind, State                                   string // ok, warn, bad, off; the word next to the dot
+	Short                                         string // the state in one word, for small tiles
 	Ms                                            string
 	Initials                                      string
 	Fill                                          int
@@ -50,7 +52,8 @@ func (s *Server) groups(withState bool) ([]svcGroup, int, int, error) {
 	up, checked := 0, 0
 	for i, sv := range items {
 		it := svcItem{Name: sv.Name, URL: sv.URL, Host: strings.TrimSuffix(hostRe.ReplaceAllString(sv.URL, ""), "/"), Description: sv.Description,
-			Note: sv.Note, Container: sv.Container, Initials: initials(sv.Name), Fill: i}
+			Note: sv.Note, Container: sv.Container, Initials: initials(sv.Name), Fill: i,
+			Icon: icon(pickIcon(sv.Icon, sv.Name, sv.Container))}
 		if withState {
 			r, ok := checks[sv.Name]
 			switch {
@@ -73,6 +76,7 @@ func (s *Server) groups(withState bool) ([]svcGroup, int, int, error) {
 				}
 			}
 		}
+		it.Short, _, _ = strings.Cut(it.State, ",")
 		g, ok := idx[sv.Group]
 		if !ok {
 			g = len(out)

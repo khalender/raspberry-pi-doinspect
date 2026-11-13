@@ -17,6 +17,18 @@
         </div>
         <div class="pair"><a class="pill coral" href="/apps?range={{$r}}">All apps</a><a class="pill sky" href="/machines?range={{$r}}">Machines</a></div>
       </div>
+    </div>
+    <div class="col span2">
+      <div class="card">
+        <div class="head"><div><h2>Apps <span class="cnt">{{.Hero.AppsTotal}}</span></h2><div class="cap">from services.yml in the dashboard repository</div></div><a class="pill white" href="/apps?range={{$r}}">All →</a></div>
+        {{with .SvcErr}}<div class="err">{{.}}</div>{{end}}
+        {{if .Groups}}{{template "groups" .Groups}}{{else}}<div class="empty">{{if .HasSvc}}No services yet{{else}}No service list set up (DOINSPECT_SERVICES){{end}}</div>{{end}}
+      </div>
+    </div>
+  </div>
+
+  <div class="grid gap">
+    <div class="col">
       {{with .Budget}}
       <div class="card">
         <div class="head"><div><h2>Memory of the Pi</h2><div class="cap">{{.Total}} on the host · VMs at their set size</div></div></div>
@@ -37,21 +49,14 @@
       </div>
       {{end}}
     </div>
-
     <div class="col">
-      <div class="card">
-        <div class="head"><div><h2>Apps <span class="cnt">{{.Hero.AppsTotal}}</span></h2><div class="cap">from services.yml in the dashboard repository</div></div><a class="pill white" href="/apps?range={{$r}}">All →</a></div>
-        {{with .SvcErr}}<div class="err">{{.}}</div>{{end}}
-        {{if .Groups}}{{template "groups" .Groups}}{{else}}<div class="empty">{{if .HasSvc}}No services yet{{else}}No service list set up (DOINSPECT_SERVICES){{end}}</div>{{end}}
-      </div>
-    </div>
-
-    <div class="col c3">
       <div class="card">
         <div class="head"><div><h2>Containers <span class="cnt">{{.Ctrs}}</span></h2><div class="cap">top {{len .Rank}} by memory</div></div><a class="pill white" href="/apps?range={{$r}}">All →</a></div>
         {{if .Rank}}<div class="rank">{{range .Rank}}<div class="r" title="{{.Name}}"><span class="nm">{{.Name}}<b>{{.RAM}}</b></span><span class="bar" style="height:{{.H}}%;background:{{.Fill}}">#{{.N}}</span></div>{{end}}</div>
         {{else}}<div class="empty">No container figures yet</div>{{end}}
       </div>
+    </div>
+    <div class="col c3">
       {{with .VM}}
       <div class="card">
         <div class="head"><div><h2>{{.Name}} CPU</h2><div class="cap">peak per part of {{$r}}</div></div>{{template "st" .}}</div>

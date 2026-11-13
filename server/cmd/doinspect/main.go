@@ -33,7 +33,7 @@ import (
 	"doinspect/server/internal/web"
 )
 
-var version = "0.3.2" // set with -ldflags "-X main.version=..."
+var version = "0.4.0" // set with -ldflags "-X main.version=..."
 
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "healthcheck" {

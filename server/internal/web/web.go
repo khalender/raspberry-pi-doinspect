@@ -65,7 +65,7 @@ const points = 300
 
 // Register adds the pages and the static files to mux.
 func (s *Server) Register(mux *http.ServeMux) {
-	s.tmpl = template.Must(template.New("").Funcs(template.FuncMap{"lower": strings.ToLower, "fill": fill}).ParseFS(templateFS, "templates/*.html"))
+	s.tmpl = template.Must(template.New("").Funcs(template.FuncMap{"lower": strings.ToLower, "fill": fill, "icon": icon}).ParseFS(templateFS, "templates/*.html"))
 	static, _ := fs.Sub(staticFS, "static")
 	files := http.FileServer(http.FS(static))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))

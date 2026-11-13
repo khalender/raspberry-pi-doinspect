@@ -179,8 +179,8 @@ func TestPages(t *testing.T) {
 	}
 	for _, path := range []string{"/", "/apps", "/machines", "/machine/pi-host"} {
 		_, body := f.get(t, path)
-		if !strings.Contains(body, `rel="icon" href="/static/icon.svg"`) {
-			t.Errorf("%s does not link the icon", path)
+		if !strings.Contains(body, `rel="icon" href="/static/icon.svg?v=test"`) || !strings.Contains(body, `href="/static/style.css?v=test"`) {
+			t.Errorf("%s does not link the icon and the stylesheet with the version (cached for a day)", path)
 		}
 		if strings.Contains(body, "https://") {
 			t.Errorf("%s loads something from outside", path)
@@ -315,7 +315,8 @@ func TestServicesAndSummary(t *testing.T) {
 	}
 	f.srv.Checks = func() map[string]services.Result { return checks }
 	_, body := f.get(t, "/")
-	for _, want := range []string{">Tools<", ">Network<", ">External<", "gitea.home.example.com", ">LAN only<", "Up, certificate not trusted", ">Link only<",
+	for _, want := range []string{">Tools<", ">Network<", ">External<", "gitea.home.example.com", ">LAN only<", "(Up, certificate not trusted)", ">Link only<",
+		`class="tile"`, `<svg class="px"`, ">doInspect<", "doInspect</title>",
 		"Arcane does not answer", "2 of 3 checked apps answer", `href="https://arcane.home.example.com">Open Arcane`, "12 ms"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("home lacks %q", want)
@@ -380,7 +381,7 @@ func TestLogin(t *testing.T) {
 	for _, path := range []string{"/", "/machines?range=7d", "/machine/pi-host", "/apps"} {
 		rec := do("GET", path, "")
 		body := rec.Body.String()
-		if rec.Code != 401 || !strings.Contains(body, `type="password"`) || !strings.Contains(body, "gitea.home.example.com") {
+		if rec.Code != 401 || !strings.Contains(body, `type="password"`) || !strings.Contains(body, "gitea.home.example.com") || !strings.Contains(body, `class="tile"`) || !strings.Contains(body, "Log in to doInspect") {
 			t.Fatalf("%s without session: %d", path, rec.Code)
 		}
 		for _, leak := range []string{"pi-host", "150 MiB", "Down", "Up", "503", "machines reporting", `http-equiv="refresh"`} {

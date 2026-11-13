@@ -5,7 +5,8 @@
     <div class="hero">
       <div class="sheet">
         <div class="pager" aria-hidden="true"><i></i><i></i><i></i></div>
-        <h3>Log in to see the load</h3>
+        <h3>Log in to doInspect</h3>
+        <p>The service links below work without a login.</p>
         <form method="post" action="/login" class="form">
           <input type="hidden" name="next" value="{{.Next}}">
           <input type="text" name="username" value="admin" autocomplete="username" hidden>
@@ -22,7 +23,7 @@
     </div>
   </div>
   {{end}}
-  <footer>doinspect {{.Version}}</footer>
+  <footer>doInspect {{.Version}}</footer>
 </div>
 </body>
 </html>

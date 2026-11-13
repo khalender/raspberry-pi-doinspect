@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 {{if .LoggedIn}}<meta http-equiv="refresh" content="30">{{end}}
-<title>{{.Title}} · doinspect</title>
-<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
-<link rel="stylesheet" href="/static/style.css">
+<title>{{.Title}} · doInspect</title>
+<link rel="icon" href="/static/icon.svg?v={{.Version}}" type="image/svg+xml">
+<link rel="stylesheet" href="/static/style.css?v={{.Version}}">
 </head>
 <body>
 <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
@@ -15,8 +15,8 @@
 
 {{define "brand"}}
     <div class="brand">
-      <div class="logo" aria-hidden="true">d</div>
-      <div><h1>doinspect</h1><small>Raspberry Pi · home server · {{.Version}}</small></div>
+      <div class="logo">{{icon "inspect"}}</div>
+      <div><h1>doInspect</h1><small>Raspberry Pi · home server · {{.Version}}</small></div>
     </div>
 {{end}}
 
@@ -35,7 +35,7 @@
 {{end}}
 
 {{define "bottom"}}
-  <footer>doinspect {{.Version}} · {{.Series}} series · this page refreshes every 30 s</footer>
+  <footer>doInspect {{.Version}} · {{.Series}} series · this page refreshes every 30 s</footer>
 </div>
 <nav class="bar" aria-label="Sections">
   <a href="/?range={{.Range.Name}}" aria-label="Home"{{if eq .Nav "home"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg><span>Home</span></a>
@@ -73,13 +73,31 @@
 {{define "groups"}}
   {{range .}}
     <h3 class="group">{{.Name}}</h3>
-    <div class="apps">
+    <div class="tiles">
     {{range .Items}}
-      <a class="app" href="{{.URL}}"><span class="ico" style="background:{{fill .Fill}}">{{.Initials}}</span>
-        <span class="txt"><span class="n">{{.Name}}</span>{{with .Note}} <span class="chip">{{.}}</span>{{end}}<br>
-        <span class="u">{{.Host}}{{with .Description}} · {{.}}{{end}}</span>
-        {{if .Kind}}<br>{{template "st" .}}{{with .Ms}} <span class="cap">{{.}}</span>{{end}}{{end}}</span>
-        <span class="go" aria-hidden="true">→</span></a>
+      <a class="tile" href="{{.URL}}" title="{{.Name}}{{with .Description}}: {{.}}{{end}}{{if .Kind}} ({{.State}}){{end}}">
+        <span class="tico">{{.Icon}}</span>
+        <span class="tn">{{.Name}}</span>
+        {{with .Note}}<span class="chip">{{.}}</span>{{end}}
+        {{if .Kind}}<span class="tst"><span class="st t-{{.Kind}}"><span class="dot d-{{.Kind}}"></span>{{.Short}}</span>{{with .Ms}} <span class="cap">{{.}}</span>{{end}}</span>{{end}}
+      </a>
+    {{end}}
+    </div>
+  {{end}}
+{{end}}
+
+{{define "groupsWide"}}
+  {{range .}}
+    <h3 class="group">{{.Name}}</h3>
+    <div class="tiles wide">
+    {{range .Items}}
+      <a class="tile" href="{{.URL}}">
+        <span class="tico">{{.Icon}}</span>
+        <span class="tn">{{.Name}}</span>
+        {{with .Note}}<span class="chip">{{.}}</span>{{end}}
+        <span class="td">{{.Host}}{{with .Description}} · {{.}}{{end}}</span>
+        {{if .Kind}}<span class="tst">{{template "st" .}}{{with .Ms}} <span class="cap">{{.}}</span>{{end}}</span>{{end}}
+      </a>
     {{end}}
     </div>
   {{end}}
