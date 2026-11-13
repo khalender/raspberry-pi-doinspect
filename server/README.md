@@ -1,15 +1,19 @@
 # doinspect server
 
-Go 1.27, no cgo. One process: a collector that reads every machine once per interval, a ring buffer per series, a snapshot file once a minute, and an HTTP server.
+Go 1.27, no cgo. One process: a collector that reads every machine once per interval, a ring buffer per series, a snapshot file once a minute, a check of every service once a minute, and an HTTP server with its own login.
 
 ```bash
 go test ./...
 DOINSPECT_TARGETS=node=http://127.0.0.1:9100/metrics DOINSPECT_LOCAL=- DOINSPECT_DATA=./tmp-data \
-  DOINSPECT_LISTEN=127.0.0.1:8080 go run ./cmd/doinspect
+  DOINSPECT_LISTEN=127.0.0.1:8080 DOINSPECT_SERVICES=- DOINSPECT_PASSWORD_HASH=- go run ./cmd/doinspect
 curl -s 127.0.0.1:8080/health; curl -s 127.0.0.1:8080/api/last
 ```
 
-Pages (HTML with SVG charts drawn by the server, no JavaScript, refresh every 30 s): `/` (machines, the network card and the biggest containers), `/containers`, `/machine/{name}`, `/network` (when network checks are set up), each with `?range=1h|6h|24h|7d` (default 24h). A chart draws at most 300 steps: the line is each step's average, the light band its peak. A machine whose last report is more than about two intervals old shows as missing. JetBrains Mono ships with the binary (`internal/web/static`, SIL Open Font License), so the pages load nothing from outside.
+Pages (HTML with SVG charts drawn by the server, no JavaScript, refresh every 30 s, Pastel Outline look): `/` (home: a summary card that lists what needs attention, the services by group with whether they answer, a card per machine, the host's memory split, the six biggest containers, the network card), `/apps` (every service and every container; `/containers` redirects here), `/machines` (a card and CPU and memory columns per machine), `/machine/{name}` (every figure as a line chart), `/network` (when network checks are set up), each with `?range=1h|6h|24h|7d` (default 24h). Column charts show the peak of each part of the range; a line chart draws at most 300 steps, the line each step's average and the light band its peak. A machine whose last report is more than about two intervals old shows as missing. A container that went quiet counts on the summary card after 2 minutes, for an hour, or for as long as a service names it; a gone series under a bare container id is the same container before `containers.txt` named it and is not shown. Nunito Sans ships with the binary (`internal/web/static`, SIL Open Font License), so the pages load nothing from outside.
+
+Login: without a session every page shows a password form and the service links, nothing else; `/api/*` answers 401. One password, checked against `DOINSPECT_PASSWORD_HASH` (bcrypt); the session is a signed cookie (`HttpOnly`, `Secure` behind HTTPS, `SameSite=Strict`) valid 30 days, signed with a key in `DOINSPECT_DATA/session.key` that doinspect creates on first start. 5 wrong passwords from one address make it wait a minute; the address is the last entry of `X-Forwarded-For`, which Traefik appends. `/health` and `/static/` stay open; `/health` gives only status and version without a session. `echo 'the password' | doinspect hash` prints the hash.
+
+Services: `services.yml` is a list of entries with `name`, `url`, `description`, `group`, optional `note` and `container` (also accepted: a `services:` list, or groups that hold one). doinspect reads it again when the file changes and keeps the last good list when it does not parse. Once a minute it requests every URL whose name resolves to a LAN address (private ranges, loopback, link-local, 100.64.0.0/10) and never dials anything else: a status below 500 is up (401 included, a redirect is not followed), a certificate the container does not trust still counts as up with a note, and a failure is tried once more after 2 s. Series `svc/http[<name>].up` (0 or 1) and `.ms`.
 
 Reading the local machine needs Linux: run it in a container with `-v /proc:/host/proc:ro -v /sys:/host/sys:ro`.
 
@@ -35,6 +39,11 @@ Reading the local machine needs Linux: run it in a container with `-v /proc:/hos
 | `DOINSPECT_SPEEDTEST_CPU` | `pi-host` | machine whose CPU peak the network page shows next to each test |
 | `DOINSPECT_SPEEDTEST_URL` | `https://speed.cloudflare.com` | speed test (`__down`, `__up`, `/cdn-cgi/trace`) |
 | `DOINSPECT_ISP_URL` | RIPEstat `prefix-overview` | AS number and holder of the public address |
+| `DOINSPECT_SERVICES` | `/services/current/services.yml` | the service list; `-` shows none |
+| `DOINSPECT_SERVICE_EVERY` | `1m` | gap between service checks, at least 10s; `0` checks none |
+| `DOINSPECT_ARCANE` | none | link on the summary card; empty takes the service named Arcane |
+| `DOINSPECT_HOST` | `pi-host` | the machine the VMs run on, for the memory card |
+| `DOINSPECT_PASSWORD_HASH` | none, required | bcrypt hash of the login password; `-` serves every page without a login |
 | `TZ` | `UTC` | time zone of the speed test times; the zone data is built into the binary |
 
 Series are named `<machine>/<figure>`: `cpu` and `cpu[N]` (percent busy), `ram.used`, `ram.total`, `ram.cached`, `swap.used` (bytes), `load1`, `load5`, `load15`, `disk[dev].read` and `.write`, `net[if].rx` and `.tx` (bytes per second), `fs[path].used` (percent) and `.size` (bytes), `uptime` (seconds), `temp` (°C), `freq` (MHz); per container on the local machine `ctr[name].ram` (bytes, without inactive file cache, as `docker stats`), `ctr[name].cpu` (percent of the whole machine) and `ctr[name].rx`, `.tx` (bytes per second).
@@ -43,4 +52,4 @@ Network series: `net/ping[name].rtt` and `.jitter` (ms), `.loss` (percent), `net
 
 Containers are found in the cgroup v2 folders under `/sys/fs/cgroup` (systemd or cgroupfs driver). Traffic comes from `/proc/<pid>/net/dev` of one of the container's processes, found through `/proc/<pid>/cgroup`; `cgroup.procs` cannot be used, because inside a container it lists every outside process as pid 0.
 
-Packages: `internal/raw` (one reading, from a node_exporter page or from `/proc`), `internal/derive` (readings to samples and rates), `internal/ring` (ring buffers and the snapshot), `internal/collect` (the loop), `internal/web` (pages and charts), `internal/netcheck` (ping, DNS, speed test), `internal/config` (`DOINSPECT_*`).
+Packages: `internal/raw` (one reading, from a node_exporter page or from `/proc`), `internal/derive` (readings to samples and rates), `internal/ring` (ring buffers and the snapshot), `internal/collect` (the loop), `internal/web` (pages and charts), `internal/netcheck` (ping, DNS, speed test), `internal/services` (the service list and its checks), `internal/auth` (login), `internal/config` (`DOINSPECT_*`).

@@ -268,6 +268,12 @@ func (s *Server) ctrRows(rg Range, from, to int64) []ctrRow {
 		}
 		row := ctrRow{Name: name, Machine: machine, ramBytes: v, RAM: bytes(v)}
 		if now-slot > 2 {
+			// A container reports under its id until containers.txt names it, within a minute
+			// (D5). That id series then stops while the same container goes on under its name,
+			// so a gone id is not a container that stopped: leave it out.
+			if isID(name) {
+				continue
+			}
 			row.Gone, row.Since = true, ago(s.Now(), s.Store.SlotTime(slot))
 			row.goneFor = s.Now().Sub(s.Store.SlotTime(slot))
 		}
@@ -367,6 +373,19 @@ func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
 	p.Lead = "Every figure this machine reports."
 	p.Body = panels
 	s.render(w, "machine.html", p)
+}
+
+// isID is true for a bare container id as cgroups name it: 12 or 64 hex characters.
+func isID(s string) bool {
+	if len(s) != 12 && len(s) != 64 {
+		return false
+	}
+	for _, c := range s {
+		if (c < '0' || c > '9') && (c < 'a' || c > 'f') {
+			return false
+		}
+	}
+	return true
 }
 
 func between(s string) string {

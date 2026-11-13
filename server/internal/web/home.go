@@ -357,8 +357,10 @@ func (s *Server) problems(groups []svcGroup, svcErr error, rows []ctrRow) []stri
 	}
 	for _, r := range rows {
 		// A container that served a service, or one that went quiet in the last hour. Older gone
-		// containers were most likely removed on purpose; the Apps page still lists them.
-		if r.Gone && (linked[r.Name] || r.goneFor < time.Hour) {
+		// containers were most likely removed on purpose; the Apps page still lists them. The
+		// first 2 minutes do not count: a recreated container reports under its new id until the
+		// next containers.txt (written every minute) names it again.
+		if r.Gone && r.goneFor >= 2*time.Minute && (linked[r.Name] || r.goneFor < time.Hour) {
 			out = append(out, r.Name+" stopped reporting "+r.Since)
 		}
 	}
@@ -389,7 +391,7 @@ func (s *Server) newest(rows []ctrRow) (string, string) {
 	from := to - int64(s.Store.Len()) + 1
 	best, bestSlot := "", int64(math.MinInt64)
 	for _, r := range rows {
-		if r.Gone {
+		if r.Gone || isID(r.Name) {
 			continue
 		}
 		for i, v := range s.Store.Range(r.Machine+"/ctr["+r.Name+"].ram", from, to) {

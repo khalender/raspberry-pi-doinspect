@@ -83,6 +83,14 @@ func newFixture(t *testing.T) fixture {
 		if slot < end-500 {
 			st.Put("docker-vm/ctr[old-job].ram", slot, 20<<20)
 		}
+		// Recreated a minute ago: its name stops until containers.txt names the new id.
+		if slot < end-4 {
+			st.Put("docker-vm/ctr[pihole].ram", slot, 25<<20)
+		}
+		// The same container before containers.txt named it.
+		if slot < end-10 {
+			st.Put("docker-vm/ctr[0123456789ab].ram", slot, 30<<20)
+		}
 	}
 	srv := &Server{
 		Store: st, Now: func() time.Time { return now.Add(7 * time.Second) }, Version: "test",
@@ -116,6 +124,12 @@ func TestPages(t *testing.T) {
 			t.Errorf("home lacks %q", want)
 		}
 	}
+	if strings.Contains(body, "0123456789ab") {
+		t.Error("a gone container id is on the home page")
+	}
+	if strings.Contains(body, "pihole stopped reporting") {
+		t.Error("a container silent for a minute is on the summary card")
+	}
 	if strings.Contains(body, "old-job stopped reporting") {
 		t.Error("a container gone for hours, serving no service, is on the summary card")
 	}
@@ -128,6 +142,9 @@ func TestPages(t *testing.T) {
 	code, body = f.get(t, "/apps")
 	if code != 200 || !strings.Contains(body, "1.17 KiB/s / 900 B/s") || !strings.Contains(body, "old-job") || !strings.Contains(body, "No service list set up") {
 		t.Fatalf("apps %d", code)
+	}
+	if strings.Contains(body, "0123456789ab") {
+		t.Error("a gone container id is on the apps page")
 	}
 	if i, j := strings.Index(body, ">gitea<"), strings.Index(body, ">old-job<"); i < 0 || j < i {
 		t.Error("a gone container sorts before a live one")
