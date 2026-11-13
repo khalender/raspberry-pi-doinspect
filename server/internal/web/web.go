@@ -1,5 +1,6 @@
-// Package web draws the dashboard: HTML from html/template with SVG charts made on the server, no
-// JavaScript (F9). Pages: / (machines and the biggest containers), /containers, /machine/{name}.
+// Package web draws the pages: HTML from html/template with SVG charts made on the server, no
+// JavaScript (D1, D9). Pages: / (home: summary, services, machines, containers, network), /apps,
+// /machines, /machine/{name}, /network, and the login page (D10).
 package web
 
 import (
@@ -14,8 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"doinspect/server/internal/auth"
 	"doinspect/server/internal/collect"
 	"doinspect/server/internal/ring"
+	"doinspect/server/internal/services"
 )
 
 //go:embed templates/*.html
@@ -24,7 +27,7 @@ var templateFS embed.FS
 //go:embed static
 var staticFS embed.FS
 
-// Server holds what the pages read: the store, the machines' status, and the clock.
+// Server holds what the pages read: the store, the machines' status, the services, and the clock.
 type Server struct {
 	Store    *ring.Store
 	Statuses func() []collect.Status
@@ -32,6 +35,13 @@ type Server struct {
 	Version  string
 	Log      *slog.Logger
 	Net      *Network // nil without network checks
+
+	Services *services.List                    // nil without a service list
+	Checks   func() map[string]services.Result // the newest check of each service; nil without checks
+	Auth     *auth.Auth                        // nil serves every page without a login
+	Host     string                            // the machine the VMs run on, for the memory card
+	Local    string                            // the machine doinspect runs on (the Docker VM)
+	Arcane   string                            // link on the summary card; empty takes the service named Arcane
 
 	tmpl *template.Template
 }
@@ -50,12 +60,12 @@ var ranges = []Range{
 	{"7d", 7 * 24 * time.Hour, []string{"-7d", "-5d", "-3.5d", "-2d", "now"}},
 }
 
-// points is how many steps a chart draws at most.
+// points is how many steps a line chart draws at most.
 const points = 300
 
 // Register adds the pages and the static files to mux.
 func (s *Server) Register(mux *http.ServeMux) {
-	s.tmpl = template.Must(template.New("").Funcs(template.FuncMap{"lower": strings.ToLower}).ParseFS(templateFS, "templates/*.html"))
+	s.tmpl = template.Must(template.New("").Funcs(template.FuncMap{"lower": strings.ToLower, "fill": fill}).ParseFS(templateFS, "templates/*.html"))
 	static, _ := fs.Sub(staticFS, "static")
 	files := http.FileServer(http.FS(static))
 	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(files, 24*time.Hour)))
@@ -63,10 +73,41 @@ func (s *Server) Register(mux *http.ServeMux) {
 	mux.HandleFunc("GET /favicon.ico", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/static/icon.svg", http.StatusMovedPermanently)
 	})
-	mux.HandleFunc("GET /{$}", s.overview)
-	mux.HandleFunc("GET /containers", s.containers)
+	mux.HandleFunc("GET /{$}", s.home)
+	mux.HandleFunc("GET /apps", s.apps)
+	mux.HandleFunc("GET /machines", s.machines)
+	mux.HandleFunc("GET /containers", func(w http.ResponseWriter, r *http.Request) {
+		to := "/apps"
+		if q := r.URL.RawQuery; q != "" {
+			to += "?" + q
+		}
+		http.Redirect(w, r, to, http.StatusMovedPermanently)
+	})
 	mux.HandleFunc("GET /machine/{name}", s.machine)
 	mux.HandleFunc("GET /network", s.network)
+	mux.HandleFunc("POST /login", s.login)
+	mux.HandleFunc("POST /logout", s.logout)
+}
+
+// Guard lets a request through when it has a session or asks for something open: /health,
+// /static/, /favicon.ico and the login form. Any other page shows the login page with the service
+// links (F31); /api/ answers 401.
+func (s *Server) Guard(next http.Handler) http.Handler {
+	if s.Auth == nil {
+		return next
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := r.URL.Path
+		if p == "/health" || strings.HasPrefix(p, "/static/") || p == "/favicon.ico" || (p == "/login" && r.Method == http.MethodPost) || s.Auth.Valid(r) {
+			next.ServeHTTP(w, r)
+			return
+		}
+		if strings.HasPrefix(p, "/api/") || r.Method != http.MethodGet {
+			http.Error(w, "login needed", http.StatusUnauthorized)
+			return
+		}
+		s.loginPage(w, r, r.URL.RequestURI(), "", http.StatusUnauthorized)
+	})
 }
 
 func cacheFor(h http.Handler, d time.Duration) http.Handler {
@@ -78,21 +119,23 @@ func cacheFor(h http.Handler, d time.Duration) http.Handler {
 
 // page is what every page's template gets.
 type page struct {
-	Title, Crumb, Lead string
-	Path               string // for the range links
-	Range              Range
-	Ranges             []Range
-	Nav                string
-	StepLabel          string
-	Reporting, Total   int
-	LastPoint          string
-	Version            string
-	HasNet             bool
-	Series             int
-	Body               any
+	Title, Lead      string
+	Path             string // for the range links
+	Range            Range
+	Ranges           []Range
+	Nav              string
+	StepLabel        string
+	Reporting, Total int
+	LastPoint        string
+	Version          string
+	HasNet           bool
+	LoggedIn         bool
+	Clock, Date      string
+	Series           int
+	Body             any
 }
 
-func (s *Server) base(r *http.Request, title, crumb, nav string) (page, Range, int64, int64) {
+func (s *Server) base(r *http.Request, title, nav string) (page, Range, int64, int64) {
 	rg := ranges[2]
 	for _, x := range ranges {
 		if x.Name == r.URL.Query().Get("range") {
@@ -107,7 +150,8 @@ func (s *Server) base(r *http.Request, title, crumb, nav string) (page, Range, i
 	}
 	from := to - n + 1
 	step := (int(n) + points - 1) / points
-	p := page{Title: title, Crumb: crumb, Path: r.URL.Path, Range: rg, Ranges: ranges, Nav: nav, Version: s.Version, Series: len(s.Store.Keys()), HasNet: s.Net != nil,
+	p := page{Title: title, Path: r.URL.Path, Range: rg, Ranges: ranges, Nav: nav, Version: s.Version, Series: len(s.Store.Keys()), HasNet: s.Net != nil,
+		LoggedIn: s.Auth != nil, Clock: now.Format("15:04"), Date: now.Format("Mon 2 Jan"),
 		StepLabel: "one point per " + every(time.Duration(step)*s.Store.Interval()) + map[bool]string{true: "", false: " (average, band = peak)"}[step == 1]}
 	var newest time.Time
 	for _, st := range s.Statuses() {
@@ -143,70 +187,6 @@ func (s *Server) series(key string, from, to int64) []Bucket {
 func (s *Server) last(key string) (float64, bool) {
 	v, _, ok := s.Store.Last(key)
 	return v, ok
-}
-
-// --- overview ---
-
-type card struct {
-	Name, Meta, Status, Since string
-	OK                        bool
-	CPU, RAM, RAMOf           string
-	CPUPct, RAMPct            float64
-	Load                      string
-	Extra, ExtraVal, ExtraSub string
-	CPUPeak, RAMNow           string
-	CPUChart, RAMChart        template.HTML
-}
-
-func (s *Server) cards(rg Range, from, to int64) []card {
-	var out []card
-	for _, st := range s.Statuses() {
-		m := st.Name + "/"
-		c := card{Name: st.Name, OK: s.reporting(st), Since: ago(s.Now(), st.LastSeen)}
-		if c.OK {
-			c.Status = "[x] reporting"
-		} else {
-			c.Status = "[!] missing"
-		}
-		if up, ok := s.last(m + "uptime"); ok {
-			c.Meta = "up " + uptime(up)
-		}
-		if n := s.cores(st.Name); n > 0 {
-			c.Meta += " · " + itoa(n) + " cores"
-		}
-		if v, ok := s.last(m + "cpu"); ok {
-			c.CPU, c.CPUPct = pct(v), v
-		}
-		used, ok1 := s.last(m + "ram.used")
-		total, ok2 := s.last(m + "ram.total")
-		if ok1 && ok2 && total > 0 {
-			c.RAM, c.RAMOf, c.RAMPct = bytes(used), "of "+bytes(total), 100*used/total
-			c.RAMNow = pct(c.RAMPct)
-		}
-		l1, ok1 := s.last(m + "load1")
-		l5, _ := s.last(m + "load5")
-		l15, _ := s.last(m + "load15")
-		if ok1 {
-			c.Load = load(l1) + " " + load(l5) + " " + load(l15)
-		}
-		if t, ok := s.last(m + "temp"); ok {
-			c.Extra, c.ExtraVal = "Temperature", celsius(t)
-			if f, ok := s.last(m + "freq"); ok {
-				c.ExtraSub = "clock " + mhz(f)
-			}
-		} else if mnt, used, size, ok := s.fullestFS(st.Name); ok {
-			c.Extra, c.ExtraVal, c.ExtraSub = "Disk "+mnt, pct(used), bytes(size*used/100)+" of "+bytes(size)
-		}
-		cpu := s.series(m+"cpu", from, to)
-		c.CPUChart = svgChart(cpu, chartOpts{W: 300, H: 60, Max: 100, Small: true})
-		if p, ok := peak(cpu); ok {
-			c.CPUPeak = "peak " + pct(p)
-		}
-		ram := s.ratio(m+"ram.used", m+"ram.total", from, to)
-		c.RAMChart = svgChart(ram, chartOpts{W: 300, H: 60, Max: 100, Small: true})
-		out = append(out, c)
-	}
-	return out
 }
 
 // ratio is 100 × a / b per stored point, for RAM in percent of the total.
@@ -246,25 +226,6 @@ func (s *Server) fullestFS(machine string) (mnt string, used, size float64, ok b
 	return
 }
 
-type overviewBody struct {
-	Cards      []card
-	Containers []ctrRow
-	More       int
-	Net        *netCard
-}
-
-func (s *Server) overview(w http.ResponseWriter, r *http.Request) {
-	p, rg, from, to := s.base(r, "Pi setup load", "doinspect / overview", "overview")
-	p.Lead = "Every machine and container, one point every " + every(s.Store.Interval()) + ", kept " + keepLabel(s.Store) + "."
-	rows := s.ctrRows(rg, from, to)
-	body := overviewBody{Cards: s.cards(rg, from, to), Containers: rows, Net: s.netCard()}
-	if len(rows) > 8 {
-		body.Containers, body.More = rows[:8], len(rows)-8
-	}
-	p.Body = body
-	s.render(w, "overview.html", p)
-}
-
 func keepLabel(st *ring.Store) string {
 	d := time.Duration(st.Len()) * st.Interval()
 	if d%(24*time.Hour) == 0 {
@@ -277,12 +238,14 @@ func keepLabel(st *ring.Store) string {
 
 type ctrRow struct {
 	Name, Machine      string
+	Service, URL       string // the service of services.yml that names this container
 	CPU, RAM, RX, TX   string
 	RAMShare           float64
 	Gone               bool
 	Since              string
 	CPUSpark, RAMSpark template.HTML
 	ramBytes           float64
+	goneFor            time.Duration
 }
 
 // ctrRows lists the containers of every machine, biggest RAM first; a container without a point
@@ -306,6 +269,7 @@ func (s *Server) ctrRows(rg Range, from, to int64) []ctrRow {
 		row := ctrRow{Name: name, Machine: machine, ramBytes: v, RAM: bytes(v)}
 		if now-slot > 2 {
 			row.Gone, row.Since = true, ago(s.Now(), s.Store.SlotTime(slot))
+			row.goneFor = s.Now().Sub(s.Store.SlotTime(slot))
 		}
 		if c, ok := s.last(pre + ".cpu"); ok {
 			row.CPU = pct(c)
@@ -336,13 +300,6 @@ func (s *Server) ctrRows(rg Range, from, to int64) []ctrRow {
 	return rows
 }
 
-func (s *Server) containers(w http.ResponseWriter, r *http.Request) {
-	p, rg, from, to := s.base(r, "Containers", "doinspect / containers", "containers")
-	p.Lead = "Every container, biggest RAM first. CPU is the share of the whole machine."
-	p.Body = s.ctrRows(rg, from, to)
-	s.render(w, "containers.html", p)
-}
-
 // --- one machine ---
 
 type panel struct {
@@ -360,7 +317,7 @@ func (s *Server) machine(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p, rg, from, to := s.base(r, name, "doinspect / "+name, "")
+	p, rg, from, to := s.base(r, name, "machines")
 	m := name + "/"
 	big := func(key string, o chartOpts) template.HTML {
 		o.W, o.H, o.Ticks = 520, 180, rg.Ticks

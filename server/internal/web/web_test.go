@@ -1,19 +1,25 @@
 package web
 
 import (
+	"html/template"
 	"io"
 	"log/slog"
 	"math"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"golang.org/x/crypto/bcrypt"
+
+	"doinspect/server/internal/auth"
 	"doinspect/server/internal/collect"
 	"doinspect/server/internal/config"
 	"doinspect/server/internal/netcheck"
 	"doinspect/server/internal/ring"
+	"doinspect/server/internal/services"
 )
 
 func TestDownsample(t *testing.T) {
@@ -101,22 +107,34 @@ func TestPages(t *testing.T) {
 	f := newFixture(t)
 	code, body := f.get(t, "/")
 	if code != 200 {
-		t.Fatalf("overview %d", code)
+		t.Fatalf("home %d", code)
 	}
-	for _, want := range []string{"pi-host", "[x] reporting", "opnsense", "[!] missing", "last report 1h 00m ago", "4.66 GiB", "of 7.45 GiB", "54 °C",
-		"1 of 2 machines reporting", "gitea", "150 MiB", "1.17 KiB/s / 900 B/s", "old-job", "<svg", `aria-current="true">24h<`, "one point per 5 min"} {
+	for _, want := range []string{"pi-host", ">Reporting<", "opnsense", ">Missing<", "last report 1h 00m ago", "4.66 GiB / 7.45 GiB", ">54<span class=\"unit\">°C",
+		"1 of 2 machines reporting", "gitea", "150 MiB", `class="ring"`, `aria-current="true">24h<`, "one point per 5 min", `aria-current="page"`,
+		"opnsense has not reported since 1h 00m ago", "1 thing needs you"} {
 		if !strings.Contains(body, want) {
-			t.Errorf("overview lacks %q", want)
+			t.Errorf("home lacks %q", want)
 		}
+	}
+	if strings.Contains(body, "old-job stopped reporting") {
+		t.Error("a container gone for hours, serving no service, is on the summary card")
+	}
+	if _, body := f.get(t, "/?range=1h"); !strings.Contains(body, "one point per 15 s<") {
+		t.Errorf("1h range step: %s", between2(body, "status", "</p>"))
+	}
+	if _, body := f.get(t, "/?range=bogus"); !strings.Contains(body, `aria-current="true">24h<`) {
+		t.Error("unknown range is not 24h")
+	}
+	code, body = f.get(t, "/apps")
+	if code != 200 || !strings.Contains(body, "1.17 KiB/s / 900 B/s") || !strings.Contains(body, "old-job") || !strings.Contains(body, "No service list set up") {
+		t.Fatalf("apps %d", code)
 	}
 	if i, j := strings.Index(body, ">gitea<"), strings.Index(body, ">old-job<"); i < 0 || j < i {
 		t.Error("a gone container sorts before a live one")
 	}
-	if _, body := f.get(t, "/?range=1h"); !strings.Contains(body, "one point per 15 s<") {
-		t.Errorf("1h range step: %s", between2(body, "status", "</span>"))
-	}
-	if _, body := f.get(t, "/?range=bogus"); !strings.Contains(body, `aria-current="true">24h<`) {
-		t.Error("unknown range is not 24h")
+	code, body = f.get(t, "/machines?range=7d")
+	if code != 200 || !strings.Contains(body, `class="tchart"`) || !strings.Contains(body, "peak 20 %") || !strings.Contains(body, "Every figure of pi-host") {
+		t.Fatalf("machines %d", code)
 	}
 	code, body = f.get(t, "/machine/pi-host?range=7d")
 	if code != 200 || !strings.Contains(body, "Temperature") || !strings.Contains(body, "the Pi slows down at 80 °C") || !strings.Contains(body, "Network br0 in") || !strings.Contains(body, "-7d") {
@@ -125,11 +143,16 @@ func TestPages(t *testing.T) {
 	if code, _ := f.get(t, "/machine/nope"); code != 404 {
 		t.Fatalf("unknown machine %d", code)
 	}
-	if code, body := f.get(t, "/containers"); code != 200 || !strings.Contains(body, "gitea") {
-		t.Fatalf("containers %d", code)
+	rec := httptest.NewRecorder()
+	f.h.ServeHTTP(rec, httptest.NewRequest("GET", "/containers?range=1h", nil))
+	if rec.Code != 301 || rec.Header().Get("Location") != "/apps?range=1h" {
+		t.Fatalf("containers redirect %d %q", rec.Code, rec.Header().Get("Location"))
 	}
-	if code, _ := f.get(t, "/static/style.css"); code != 200 {
+	if code, body := f.get(t, "/static/style.css"); code != 200 || strings.Contains(body, "googleapis") || !strings.Contains(body, "nunito-sans-latin-400-normal.woff2") {
 		t.Fatalf("css %d", code)
+	}
+	if code, _ := f.get(t, "/static/nunito-sans-latin-800-normal.woff2"); code != 200 {
+		t.Fatalf("font %d", code)
 	}
 	if code, body := f.get(t, "/static/icon.svg"); code != 200 || !strings.HasPrefix(body, "<svg") {
 		t.Fatalf("icon %d", code)
@@ -137,8 +160,29 @@ func TestPages(t *testing.T) {
 	if code, _ := f.get(t, "/favicon.ico"); code != 301 {
 		t.Fatalf("favicon.ico %d", code)
 	}
-	if _, body := f.get(t, "/"); !strings.Contains(body, `rel="icon" href="/static/icon.svg"`) {
-		t.Fatal("page does not link the icon")
+	for _, path := range []string{"/", "/apps", "/machines", "/machine/pi-host"} {
+		_, body := f.get(t, path)
+		if !strings.Contains(body, `rel="icon" href="/static/icon.svg"`) {
+			t.Errorf("%s does not link the icon", path)
+		}
+		if strings.Contains(body, "https://") {
+			t.Errorf("%s loads something from outside", path)
+		}
+	}
+}
+
+// TestEmptyStore: every page renders before the first reading.
+func TestEmptyStore(t *testing.T) {
+	srv := &Server{Store: ring.New(15*time.Second, 7*24*time.Hour), Now: time.Now, Version: "test", Log: slog.New(slog.NewTextHandler(io.Discard, nil)),
+		Statuses: func() []collect.Status { return nil }}
+	mux := http.NewServeMux()
+	srv.Register(mux)
+	for _, path := range []string{"/", "/apps", "/machines"} {
+		rec := httptest.NewRecorder()
+		mux.ServeHTTP(rec, httptest.NewRequest("GET", path, nil))
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), "</html>") {
+			t.Errorf("%s: %d", path, rec.Code)
+		}
 	}
 }
 
@@ -159,8 +203,8 @@ func TestNetworkPage(t *testing.T) {
 	if code, _ := f.get(t, "/network"); code != 404 {
 		t.Fatalf("network page without checks: %d", code)
 	}
-	if _, body := f.get(t, "/"); strings.Contains(body, "network →") {
-		t.Fatal("overview shows a network card without checks")
+	if _, body := f.get(t, "/"); strings.Contains(body, "Network →") || strings.Contains(body, `aria-label="Network"`) {
+		t.Fatal("home shows a network card or link without checks")
 	}
 	now := f.srv.Now()
 	var results []netcheck.Result
@@ -180,8 +224,8 @@ func TestNetworkPage(t *testing.T) {
 	if code != 200 || !strings.Contains(body, "Known after the first speed test") || !strings.Contains(body, "No speed test yet") {
 		t.Fatalf("empty network page %d", code)
 	}
-	if _, body := f.get(t, "/"); !strings.Contains(body, "network →") || !strings.Contains(body, "provider known after the first speed test") {
-		t.Fatal("overview lacks the empty network card")
+	if _, body := f.get(t, "/"); !strings.Contains(body, "Network →") || !strings.Contains(body, "provider known after the first speed test") {
+		t.Fatal("home lacks the empty network card")
 	}
 
 	end := f.srv.Store.Slot(now)
@@ -205,7 +249,7 @@ func TestNetworkPage(t *testing.T) {
 	for _, want := range []string{"EXAMPLE-AS Example ISP", "AS64500", "192.0.2.99", "495 Mbit/s", "99.0 Mbit/s", "3.1 ms", "25 ms",
 		">gateway<", "192.0.2.1", "Ping (round trip)", "now 1.2 ms", "unreachable", ">pihole<", "192.0.2.53:53", "now 4.0 ms",
 		"Failed lookups in this range", "576 of 5760 (10 %)", "lookup of cloudflare.com", "changed", "time limit 2m0s reached",
-		"next test", `aria-current="page">Network<`} {
+		"next test", `aria-label="Network" aria-current="page"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("network page lacks %q", want)
 		}
@@ -227,7 +271,161 @@ func TestNetworkPage(t *testing.T) {
 	if !strings.Contains(body, "Pi host CPU peak") {
 		t.Error("no CPU peak for the latest test")
 	}
-	if _, body := f.get(t, "/"); !strings.Contains(body, "495 Mbit/s") || !strings.Contains(body, "gateway 1.2 ms") {
-		t.Error("overview lacks the latest speed test or the gateway ping")
+	if _, body := f.get(t, "/"); !strings.Contains(body, "495 Mbit/s") || !strings.Contains(body, "gateway 1.2 ms") || !strings.Contains(body, "No answer from isp") {
+		t.Error("home lacks the latest speed test, the gateway ping or the lost target")
+	}
+}
+
+// TestServicesAndSummary: services from services.yml with their checks, the summary card, and the
+// container that serves a service.
+func TestServicesAndSummary(t *testing.T) {
+	f := newFixture(t)
+	dir := t.TempDir()
+	path := dir + "/services.yml"
+	yml := "- name: Gitea\n  url: https://gitea.home.example.com\n  description: git\n  group: Tools\n  container: gitea\n" +
+		"- name: Arcane\n  url: https://arcane.home.example.com\n  group: Tools\n" +
+		"- name: OPNsense\n  url: https://192.0.2.1\n  group: Network\n  note: LAN only\n" +
+		"- name: NetBird\n  url: https://app.netbird.io\n  group: External\n"
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	f.srv.Services = &services.List{Path: path}
+	checks := map[string]services.Result{
+		"Gitea":    {Checked: true, Up: true, Status: 200, Ms: 12},
+		"Arcane":   {Checked: true, Status: 502, Note: "502 Bad Gateway"},
+		"OPNsense": {Checked: true, Up: true, Note: "certificate not trusted"},
+		"NetBird":  {Note: "outside the LAN, not checked"},
+	}
+	f.srv.Checks = func() map[string]services.Result { return checks }
+	_, body := f.get(t, "/")
+	for _, want := range []string{">Tools<", ">Network<", ">External<", "gitea.home.example.com", ">LAN only<", "Up, certificate not trusted", ">Link only<",
+		"Arcane does not answer", "2 of 3 checked apps answer", `href="https://arcane.home.example.com">Open Arcane`, "12 ms"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("home lacks %q", want)
+		}
+	}
+	_, body = f.get(t, "/apps")
+	if !strings.Contains(body, `<a href="https://gitea.home.example.com">Gitea</a>`) {
+		t.Error("the container table does not link gitea to its service")
+	}
+	// A broken file keeps the last list and says why.
+	time.Sleep(10 * time.Millisecond)
+	if err := os.WriteFile(path, []byte("- name: [unclosed\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_, body = f.get(t, "/apps")
+	if !strings.Contains(body, "Showing the last list that loaded") || !strings.Contains(body, "gitea.home.example.com") {
+		t.Error("a broken services.yml dropped the list or hid the error")
+	}
+	// Everything up: the summary card is sage and says so.
+	if err := os.WriteFile(path, []byte(yml), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	checks["Arcane"] = services.Result{Checked: true, Up: true, Status: 401}
+	f.srv.Statuses = func() []collect.Status { return []collect.Status{{Name: "pi-host", LastSeen: f.srv.Now()}} }
+	_, body = f.get(t, "/")
+	if !strings.Contains(body, "All 3 apps are up,<br>nothing needs you") || strings.Contains(body, `class="hero alert"`) {
+		t.Errorf("summary with nothing wrong: %s", between2(body, `class="hero`, "</h3>"))
+	}
+}
+
+// TestLogin: without a session every page is the login form with the service links and no figure;
+// the password starts a session; repeated failures wait; a forged cookie is refused.
+func TestLogin(t *testing.T) {
+	f := newFixture(t)
+	dir := t.TempDir()
+	os.WriteFile(dir+"/services.yml", []byte("- name: Gitea\n  url: https://gitea.home.example.com\n  group: Tools\n  container: gitea\n"), 0o600)
+	f.srv.Services = &services.List{Path: dir + "/services.yml"}
+	f.srv.Checks = func() map[string]services.Result {
+		return map[string]services.Result{"Gitea": {Checked: true, Status: 503}}
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte("right horse"), bcrypt.MinCost)
+	now := f.srv.Now()
+	f.srv.Auth = auth.New(hash, []byte("0123456789abcdef0123456789abcdef"), slog.New(slog.NewTextHandler(io.Discard, nil)))
+	f.srv.Auth.Now = func() time.Time { return now }
+	h := f.srv.Guard(f.h)
+	do := func(method, path, form string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
+		var r *http.Request
+		if form != "" {
+			r = httptest.NewRequest(method, path, strings.NewReader(form))
+			r.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		} else {
+			r = httptest.NewRequest(method, path, nil)
+		}
+		r.RemoteAddr = "192.0.2.50:1234"
+		for _, c := range cookies {
+			r.AddCookie(c)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+	for _, path := range []string{"/", "/machines?range=7d", "/machine/pi-host", "/apps"} {
+		rec := do("GET", path, "")
+		body := rec.Body.String()
+		if rec.Code != 401 || !strings.Contains(body, `type="password"`) || !strings.Contains(body, "gitea.home.example.com") {
+			t.Fatalf("%s without session: %d", path, rec.Code)
+		}
+		for _, leak := range []string{"pi-host", "150 MiB", "Down", "Up", "503", "machines reporting", `http-equiv="refresh"`} {
+			if strings.Contains(body, leak) && !strings.Contains(path, leak) {
+				t.Errorf("%s login page shows %q", path, leak)
+			}
+		}
+		if !strings.Contains(body, `name="next" value="`+template.HTMLEscapeString(path)+`"`) {
+			t.Errorf("%s: next not kept", path)
+		}
+	}
+	if rec := do("GET", "/api/last", ""); rec.Code != 401 {
+		t.Fatalf("api without session %d", rec.Code)
+	}
+	if rec := do("GET", "/static/style.css", ""); rec.Code != 200 {
+		t.Fatalf("static without session %d", rec.Code)
+	}
+	// Wrong password, then five more: the sixth waits.
+	if rec := do("POST", "/login", "password=nope&next=/machines"); rec.Code != 401 || !strings.Contains(rec.Body.String(), "Wrong password") {
+		t.Fatalf("wrong password %d", rec.Code)
+	}
+	for i := 0; i < 4; i++ {
+		do("POST", "/login", "password=nope")
+	}
+	if rec := do("POST", "/login", "password=right horse"); rec.Code != 429 {
+		t.Fatalf("sixth try in a minute %d, want 429", rec.Code)
+	}
+	now = now.Add(61 * time.Second)
+	rec := do("POST", "/login", "password=right horse&next=//evil.example/x")
+	if rec.Code != 303 || rec.Header().Get("Location") != "/" {
+		t.Fatalf("login %d to %q", rec.Code, rec.Header().Get("Location"))
+	}
+	cookie := rec.Result().Cookies()[0]
+	if !cookie.HttpOnly || cookie.SameSite != http.SameSiteStrictMode || cookie.MaxAge != 30*24*3600 {
+		t.Fatalf("cookie %+v", cookie)
+	}
+	if rec := do("GET", "/machines", "", cookie); rec.Code != 200 || !strings.Contains(rec.Body.String(), "pi-host") {
+		t.Fatalf("with session %d", rec.Code)
+	}
+	if rec := do("POST", "/login", "password=right horse&next=/machines?range=7d"); rec.Header().Get("Location") != "/machines?range=7d" {
+		t.Fatalf("next %q", rec.Header().Get("Location"))
+	}
+	forged := &http.Cookie{Name: auth.CookieName, Value: "9999999999.AAAA"}
+	if rec := do("GET", "/", "", forged); rec.Code != 401 {
+		t.Fatalf("forged cookie %d", rec.Code)
+	}
+	now = now.Add(31 * 24 * time.Hour)
+	if rec := do("GET", "/", "", cookie); rec.Code != 401 {
+		t.Fatalf("expired cookie %d", rec.Code)
+	}
+	// Logout clears the cookie; a POST from another site is refused.
+	r := httptest.NewRequest("POST", "/logout", nil)
+	r.Header.Set("Origin", "https://evil.example")
+	r.AddCookie(cookie)
+	rr := httptest.NewRecorder()
+	f.h.ServeHTTP(rr, r)
+	if rr.Code != 400 {
+		t.Fatalf("cross-site logout %d", rr.Code)
+	}
+	rr = httptest.NewRecorder()
+	f.h.ServeHTTP(rr, httptest.NewRequest("POST", "/logout", nil))
+	if c := rr.Result().Cookies(); rr.Code != 303 || len(c) != 1 || c[0].MaxAge >= 0 {
+		t.Fatalf("logout %d %+v", rr.Code, c)
 	}
 }

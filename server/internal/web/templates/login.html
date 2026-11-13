@@ -1,0 +1,28 @@
+{{template "head" .}}
+  <header class="top">{{template "brand" .}}<div class="clock"><b>{{.Clock}}</b><div>{{.Date}}</div></div></header>
+  {{with .Body}}
+  <div class="login">
+    <div class="hero">
+      <div class="sheet">
+        <div class="pager" aria-hidden="true"><i></i><i></i><i></i></div>
+        <h3>Log in to see the load</h3>
+        <form method="post" action="/login" class="form">
+          <input type="hidden" name="next" value="{{.Next}}">
+          <input type="text" name="username" value="admin" autocomplete="username" hidden>
+          <label for="pw">Password</label>
+          <input id="pw" type="password" name="password" autocomplete="current-password" required autofocus>
+          {{with .Error}}<p class="err" role="alert">{{.}}</p>{{end}}
+          <button class="cta" type="submit">Log in <span aria-hidden="true">→</span></button>
+        </form>
+      </div>
+    </div>
+    <div class="card">
+      <div class="head"><div><h2>Apps</h2><div class="cap">every service of the Pi, no login needed for the links</div></div></div>
+      {{if .Groups}}{{template "groups" .Groups}}{{else}}<div class="empty">No service list yet</div>{{end}}
+    </div>
+  </div>
+  {{end}}
+  <footer>doinspect {{.Version}}</footer>
+</div>
+</body>
+</html>

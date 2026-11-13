@@ -1,55 +1,105 @@
-{{define "top"}}<!doctype html>
+{{define "head"}}<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="refresh" content="30">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+{{if .LoggedIn}}<meta http-equiv="refresh" content="30">{{end}}
 <title>{{.Title}} · doinspect</title>
 <link rel="icon" href="/static/icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div><div class="blob b4"></div>
 <div class="wrap">
-  <header>
-    <span class="crumb">{{.Crumb}}</span>
-    <h1>{{.Title}}</h1>
-    {{with .Lead}}<span class="lead">{{.}}</span>{{end}}
-  </header>
-  <div class="bar">
-    <nav class="group" aria-label="Pages">
-      <a href="/?range={{.Range.Name}}"{{if eq .Nav "overview"}} aria-current="page"{{end}}>Overview</a>
-      <a href="/containers?range={{.Range.Name}}"{{if eq .Nav "containers"}} aria-current="page"{{end}}>Containers</a>
-      {{if .HasNet}}<a href="/network?range={{.Range.Name}}"{{if eq .Nav "network"}} aria-current="page"{{end}}>Network</a>{{end}}
-    </nav>
-    <nav class="group" aria-label="Time range">
+{{end}}
+
+{{define "brand"}}
+    <div class="brand">
+      <div class="logo" aria-hidden="true">d</div>
+      <div><h1>doinspect</h1><small>Raspberry Pi · home server · {{.Version}}</small></div>
+    </div>
+{{end}}
+
+{{define "top"}}{{template "head" .}}
+  <header class="top">
+    {{template "brand" .}}
+    <nav class="strip" aria-label="Range">
       {{$cur := .Range.Name}}{{$path := .Path}}{{range .Ranges}}<a href="{{$path}}?range={{.Name}}"{{if eq .Name $cur}} aria-current="true"{{end}}>{{.Name}}</a>{{end}}
     </nav>
-    <span class="status">{{if eq .Reporting .Total}}[x]{{else}}[!]{{end}} {{.Reporting}} of {{.Total}} machines reporting · last point {{.LastPoint}} · {{.StepLabel}}</span>
-  </div>
+    <div class="clock"><b>{{.Clock}}</b><div>{{.Date}}</div>
+      {{if .LoggedIn}}<form method="post" action="/logout"><button class="link">Log out</button></form>{{end}}
+    </div>
+  </header>
+  <p class="status"><span class="st t-{{if eq .Reporting .Total}}ok{{else}}bad{{end}}"><span class="dot d-{{if eq .Reporting .Total}}ok{{else}}bad{{end}}"></span>{{.Reporting}} of {{.Total}} machines reporting</span> · last point {{.LastPoint}} · {{.StepLabel}}</p>
+  {{with .Lead}}<p class="lead">{{.}}</p>{{end}}
 {{end}}
 
 {{define "bottom"}}
   <footer>doinspect {{.Version}} · {{.Series}} series · this page refreshes every 30 s</footer>
 </div>
+<nav class="bar" aria-label="Sections">
+  <a href="/?range={{.Range.Name}}" aria-label="Home"{{if eq .Nav "home"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24"><path d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6H9v6H5a1 1 0 0 1-1-1z"/></svg><span>Home</span></a>
+  <a href="/apps?range={{.Range.Name}}" aria-label="Apps"{{if eq .Nav "apps"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg><span>Apps</span></a>
+  <a href="/machines?range={{.Range.Name}}" aria-label="Machines"{{if eq .Nav "machines"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24"><rect x="3" y="4" width="13" height="10" rx="2"/><path d="M7 18h5M9.5 14v4"/><rect x="18" y="6" width="3" height="12" rx="1"/></svg><span>Machines</span></a>
+  {{if .HasNet}}<a href="/network?range={{.Range.Name}}" aria-label="Network"{{if eq .Nav "network"}} aria-current="page"{{end}}><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M4 12h16M12 4c2.5 2.5 2.5 13.5 0 16M12 4c-2.5 2.5-2.5 13.5 0 16"/></svg><span>Network</span></a>{{end}}
+</nav>
 </body>
 </html>
 {{end}}
 
+{{define "st"}}<span class="st t-{{.Kind}}"><span class="dot d-{{.Kind}}"></span>{{.State}}</span>{{end}}
+
+{{define "cols"}}{{if .Cols}}
+  {{if or .Lo .Hi}}<div class="scale"><span>{{.Lo}}</span><span>{{.Hi}}</span></div>{{end}}
+  <div class="tchart" style="grid-template-columns:repeat({{.N}},minmax(0,1fr))" role="img" aria-label="{{or .Label "no data"}}">
+    {{range .Cols}}<div class="cb{{if .Sel}} sel{{end}}{{if .None}} none{{end}}"><i style="height:{{.H}}%"></i>{{with .Tip}}<span class="tip">{{.}}</span>{{end}}</div>{{end}}
+  </div>
+  <div class="base" style="grid-template-columns:repeat({{.N}},minmax(0,1fr))">{{range .Cols}}<span{{if .Sel}} class="sel"{{end}}>{{.Tick}}</span>{{end}}</div>
+{{else}}<div class="empty">No data yet</div>{{end}}{{end}}
+
+{{define "mcard"}}
+  <div class="card">
+    <div class="head"><div><h2><a href="/machine/{{.Name}}">{{.Name}}</a></h2><div class="cap">{{if .OK}}{{.Meta}}{{else}}last report {{.Since}}{{end}}</div></div>{{template "st" .}}</div>
+    <div class="mstats">{{if .HasCPU}}{{.Ring}}{{else}}<div class="ring empty-ring">-</div>{{end}}
+      <div class="bars">{{range .Bars}}
+        <div><div class="lbl"><span>{{.Label}}</span><b>{{.Right}}</b></div>
+        <div class="prog {{.Cls}}" role="meter" aria-valuenow="{{.Pct}}" aria-valuemin="0" aria-valuemax="100" aria-label="{{.Label}}"><span style="width:{{.Pct}}%"></span><b>{{.PctText}}</b></div></div>
+      {{else}}<div class="empty">No figures yet</div>{{end}}</div>
+    </div>
+    {{if .Stats}}<div class="split">{{range $i, $s := .Stats}}{{if $i}}<div class="rule"></div>{{end}}<div><div class="v">{{$s.V}}<span class="unit">{{$s.Unit}}</span></div><div class="cap">{{$s.Cap}}</div></div>{{end}}</div>{{end}}
+  </div>
+{{end}}
+
+{{define "groups"}}
+  {{range .}}
+    <h3 class="group">{{.Name}}</h3>
+    <div class="apps">
+    {{range .Items}}
+      <a class="app" href="{{.URL}}"><span class="ico" style="background:{{fill .Fill}}">{{.Initials}}</span>
+        <span class="txt"><span class="n">{{.Name}}</span>{{with .Note}} <span class="chip">{{.}}</span>{{end}}<br>
+        <span class="u">{{.Host}}{{with .Description}} · {{.}}{{end}}</span>
+        {{if .Kind}}<br>{{template "st" .}}{{with .Ms}} <span class="cap">{{.}}</span>{{end}}{{end}}</span>
+        <span class="go" aria-hidden="true">→</span></a>
+    {{end}}
+    </div>
+  {{end}}
+{{end}}
+
 {{define "ctrtable"}}
-<div class="table-wrap">
+<div class="tbl">
   <table>
-    <thead><tr><th>Container</th><th class="num">CPU</th><th class="num sorted">RAM ↓</th><th>RAM share</th><th class="num">In / out</th><th>CPU trend</th><th>RAM trend</th></tr></thead>
+    <thead><tr><th>Container</th><th>Service</th><th class="r">CPU</th><th class="r">RAM ↓</th><th>RAM share</th><th class="r">In / out</th><th>CPU trend</th><th>RAM trend</th></tr></thead>
     <tbody>
     {{range .}}
       {{if .Gone}}
-      <tr class="gone"><td class="name">{{.Name}}</td><td class="num">-</td><td class="num">{{.RAM}}</td><td><span class="badge bad">[!] missing</span></td><td class="num">last report {{.Since}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
+      <tr class="gone"><td class="n">{{.Name}}</td><td>{{if .URL}}<a href="{{.URL}}">{{.Service}}</a>{{end}}</td><td class="r">-</td><td class="r">{{.RAM}}</td><td><span class="st t-bad"><span class="dot d-bad"></span>Missing</span></td><td class="r">last report {{.Since}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
       {{else}}
-      <tr><td class="name">{{.Name}}</td><td class="num">{{or .CPU "-"}}</td><td class="num">{{.RAM}}</td>
+      <tr><td class="n">{{.Name}}</td><td>{{if .URL}}<a href="{{.URL}}">{{.Service}}</a>{{end}}</td><td class="r">{{or .CPU "-"}}</td><td class="r">{{.RAM}}</td>
         <td class="share"><div class="meter"><i style="width:{{.RAMShare}}%"></i></div></td>
-        <td class="num">{{if .RX}}{{.RX}} / {{.TX}}{{else}}-{{end}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
+        <td class="r">{{if .RX}}{{.RX}} / {{.TX}}{{else}}-{{end}}</td><td class="spark">{{.CPUSpark}}</td><td class="spark">{{.RAMSpark}}</td></tr>
       {{end}}
     {{else}}
-      <tr><td colspan="7" class="empty">[ ] No containers yet. They show once containers.txt and two readings are in.</td></tr>
+      <tr><td colspan="8" class="empty">No containers yet. They show once containers.txt and two readings are in.</td></tr>
     {{end}}
     </tbody>
   </table>

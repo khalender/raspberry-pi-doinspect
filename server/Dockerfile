@@ -1,7 +1,7 @@
 # doinspect: static Go binary on scratch, linux/arm64 for the Pi's Docker VM.
-# Build from the repository root: docker buildx build --platform linux/arm64 --build-arg VERSION=0.2.2 -f server/Dockerfile -t doinspect:0.2.2 --load .
+# Build from the repository root: docker buildx build --platform linux/arm64 --build-arg VERSION=0.3.0 -f server/Dockerfile -t doinspect:0.3.0 --load .
 FROM --platform=$BUILDPLATFORM golang:1.27 AS build
-ARG TARGETOS=linux TARGETARCH=arm64 VERSION=0.2.2
+ARG TARGETOS=linux TARGETARCH=arm64 VERSION=0.3.0
 WORKDIR /src
 COPY server/go.mod server/go.sum ./
 RUN go mod download

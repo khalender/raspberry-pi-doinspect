@@ -1,9 +1,10 @@
 {{template "top" .}}
-  <section class="detail">
+  <div class="grid2">
   {{range .Body}}
-    <article class="card"><div class="mini"><span class="k"><span>{{.Title}}</span><b>{{.Now}}</b></span>{{.Chart}}</div></article>
+    <div class="card"><div class="head"><div><h2>{{.Title}}</h2><div class="cap">{{.Now}}</div></div></div>{{.Chart}}</div>
   {{else}}
-    <p class="empty">[ ] No figures from this machine yet.</p>
+    <div class="empty">No figures from this machine yet.</div>
   {{end}}
-  </section>
+  </div>
+  <p><a class="pill white" href="/machines?range={{.Range.Name}}">← All machines</a></p>
 {{template "bottom" .}}

@@ -92,7 +92,7 @@ func (s *Server) network(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	p, rg, from, to := s.base(r, "Network", "doinspect / network", "network")
+	p, rg, from, to := s.base(r, "Network", "network")
 	p.Lead = "Ping, jitter and loss every " + every(s.Store.Interval()) + ", DNS lookups, and the speed test."
 	errs := s.Net.Errors()
 	b := networkBody{Running: s.Net.Running(), Keep: itoa(int(s.Net.Keep.Hours()/24)) + " days", Every: every(s.Store.Interval()), DNSName: s.Net.DNSName}

@@ -1,0 +1,71 @@
+{{template "top" .}}
+{{$r := .Range.Name}}
+{{with .Body}}
+  <div class="grid">
+    <div class="col">
+      <div class="hero{{if .Hero.Problems}} alert{{end}}">
+        <div class="sheet">
+          <div class="pager" aria-hidden="true"><i></i><i></i><i></i></div>
+          {{if .Hero.Problems}}
+            <h3>{{len .Hero.Problems}}{{if .Hero.More}}+{{end}} {{if eq (len .Hero.Problems) 1}}thing needs{{else}}things need{{end}} you</h3>
+            <ul>{{range .Hero.Problems}}<li>{{.}}</li>{{end}}{{if .Hero.More}}<li>and {{.Hero.More}} more</li>{{end}}</ul>
+          {{else}}
+            <h3>All {{.Hero.AppsTotal}} apps are up,<br>nothing needs you</h3>
+          {{end}}
+          <p>{{.Hero.AppsUp}} of {{.Hero.AppsTotal}} checked apps answer, {{.Hero.Containers}} containers running.{{with .Hero.Newest}}<br>Newest container: {{.}}{{with $.Body.Hero.NewestAgo}}, started {{.}}{{end}}.{{end}}</p>
+          {{with .Hero.Arcane}}<a class="cta" href="{{.}}">Open Arcane <span aria-hidden="true">→</span></a>{{end}}
+        </div>
+        <div class="pair"><a class="pill coral" href="/apps?range={{$r}}">All apps</a><a class="pill sky" href="/machines?range={{$r}}">Machines</a></div>
+      </div>
+      {{with .Budget}}
+      <div class="card">
+        <div class="head"><div><h2>Memory of the Pi</h2><div class="cap">{{.Total}} on the host · VMs at their set size</div></div></div>
+        <div class="budget" role="img" aria-label="Memory split">{{range .Parts}}<span style="width:{{.W}}%;background:{{.Fill}}"></span>{{end}}</div>
+        <div class="legend">{{range .Parts}}<span><i class="sw" style="background:{{.Fill}}"></i>{{.Name}} {{.Size}}</span>{{end}}</div>
+      </div>
+      {{end}}
+      {{with .Net}}
+      <div class="card">
+        <div class="head"><div><h2>Network</h2><div class="cap">{{or .ISP "provider known after the first speed test"}}</div></div>{{template "st" .}}</div>
+        <div class="netrow">
+          <div><span class="big">{{.Big}}</span><span class="unit">{{.BigUnit}}</span>
+            <div class="cap">{{range $i, $l := .Lines}}{{if $i}} · {{end}}{{$l}}{{end}}</div></div>
+        </div>
+        {{template "cols" .Spark}}
+        {{if .Has}}{{template "split3" .}}{{end}}
+        <div class="foot"><span>{{if .Has}}{{if .Err}}last speed test failed{{else}}speed test {{.When}}{{end}}{{else}}no speed test yet{{end}}</span><a class="pill sky" href="/network?range={{$r}}">Network →</a></div>
+      </div>
+      {{end}}
+    </div>
+
+    <div class="col">
+      <div class="card">
+        <div class="head"><div><h2>Apps <span class="cnt">{{.Hero.AppsTotal}}</span></h2><div class="cap">from services.yml in the dashboard repository</div></div><a class="pill white" href="/apps?range={{$r}}">All →</a></div>
+        {{with .SvcErr}}<div class="err">{{.}}</div>{{end}}
+        {{if .Groups}}{{template "groups" .Groups}}{{else}}<div class="empty">{{if .HasSvc}}No services yet{{else}}No service list set up (DOINSPECT_SERVICES){{end}}</div>{{end}}
+      </div>
+    </div>
+
+    <div class="col c3">
+      <div class="card">
+        <div class="head"><div><h2>Containers <span class="cnt">{{.Ctrs}}</span></h2><div class="cap">top {{len .Rank}} by memory</div></div><a class="pill white" href="/apps?range={{$r}}">All →</a></div>
+        {{if .Rank}}<div class="rank">{{range .Rank}}<div class="r" title="{{.Name}}"><span class="nm">{{.Name}}<b>{{.RAM}}</b></span><span class="bar" style="height:{{.H}}%;background:{{.Fill}}">#{{.N}}</span></div>{{end}}</div>
+        {{else}}<div class="empty">No container figures yet</div>{{end}}
+      </div>
+      {{with .VM}}
+      <div class="card">
+        <div class="head"><div><h2>{{.Name}} CPU</h2><div class="cap">peak per part of {{$r}}</div></div>{{template "st" .}}</div>
+        {{template "cols" $.Body.VMCols}}
+      </div>
+      {{end}}
+    </div>
+  </div>
+
+  <h2 class="section">Machines</h2>
+  <div class="grid">
+    {{range .Machines}}{{template "mcard" .}}{{else}}<div class="empty">No machines set up. Set DOINSPECT_TARGETS or DOINSPECT_LOCAL.</div>{{end}}
+  </div>
+{{end}}
+{{template "bottom" .}}
+
+{{define "split3"}}<div class="split"><div><div class="v">{{.Down}}</div><div class="cap">Download</div></div><div class="rule"></div><div><div class="v">{{.Up}}</div><div class="cap">Upload</div></div><div class="rule"></div><div><div class="v">{{or .GatewayRTT "-"}}</div><div class="cap">Ping</div></div></div>{{end}}

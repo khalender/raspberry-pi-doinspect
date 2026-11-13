@@ -1,0 +1,14 @@
+{{template "top" .}}
+  <div class="grid">
+  {{range .Body}}
+    <div class="col">
+      {{template "mcard" .}}
+      <div class="card"><div class="head"><div><h2>CPU</h2><div class="cap">{{.Name}} · {{or .CPUCols.Label "no data"}}</div></div></div>{{template "cols" .CPUCols}}</div>
+      <div class="card"><div class="head"><div><h2>Memory</h2><div class="cap">{{.Name}} · {{or .RAMCols.Label "no data"}}</div></div></div>{{template "cols" .RAMCols}}</div>
+      <a class="pill white wide" href="/machine/{{.Name}}?range={{$.Range.Name}}">Every figure of {{.Name}} →</a>
+    </div>
+  {{else}}
+    <div class="empty">No machines set up. Set DOINSPECT_TARGETS or DOINSPECT_LOCAL.</div>
+  {{end}}
+  </div>
+{{template "bottom" .}}

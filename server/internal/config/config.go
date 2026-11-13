@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Target is a node_exporter to scrape: the machine's name as the dashboard shows it, and its URL.
@@ -36,6 +38,14 @@ type Config struct {
 	SpeedISPURL   string        // RIPEstat, for the ISP behind the public address
 	SpeedPingName string        // ping target timed before and during the test
 	SpeedCPU      string        // machine whose CPU peak the page shows next to each test
+
+	// Home page and login (D9, D10).
+	Services     string        // path of services.yml; empty shows no service list
+	ServiceEvery time.Duration // gap between service checks; 0 checks none
+	Arcane       string        // link on the summary card; empty takes the service named Arcane
+	Host         string        // the machine the VMs run on, for the memory card
+	PasswordHash string        // bcrypt hash of the login password; empty when NoLogin
+	NoLogin      bool          // DOINSPECT_PASSWORD_HASH=- serves every page without a login
 }
 
 // FromEnv builds a Config from getenv (os.Getenv in production).
@@ -136,6 +146,35 @@ func FromEnv(getenv func(string) string) (Config, error) {
 	c.SpeedISPURL = str("DOINSPECT_ISP_URL", "https://stat.ripe.net/data/prefix-overview/data.json")
 	c.SpeedPingName = str("DOINSPECT_SPEEDTEST_PING", "internet")
 	c.SpeedCPU = str("DOINSPECT_SPEEDTEST_CPU", "pi-host")
+
+	c.Services = str("DOINSPECT_SERVICES", "/services/current/services.yml")
+	if getenv("DOINSPECT_SERVICES") == "-" {
+		c.Services = ""
+	}
+	if v := getenv("DOINSPECT_SERVICE_EVERY"); v == "0" {
+		c.ServiceEvery = 0
+	} else if c.ServiceEvery, err = dur("DOINSPECT_SERVICE_EVERY", time.Minute); err != nil {
+		return c, err
+	} else if c.ServiceEvery < 10*time.Second {
+		return c, fmt.Errorf("DOINSPECT_SERVICE_EVERY must be at least 10s or 0: %s", c.ServiceEvery)
+	}
+	c.Arcane = getenv("DOINSPECT_ARCANE")
+	if c.Arcane != "" {
+		if u, err := url.Parse(c.Arcane); err != nil || (u.Scheme != "http" && u.Scheme != "https") {
+			return c, fmt.Errorf("DOINSPECT_ARCANE: want an http or https address, got %q", c.Arcane)
+		}
+	}
+	c.Host = str("DOINSPECT_HOST", "pi-host")
+	switch h := getenv("DOINSPECT_PASSWORD_HASH"); h {
+	case "-":
+		c.NoLogin = true
+	case "":
+	default:
+		if _, err := bcrypt.Cost([]byte(h)); err != nil {
+			return c, fmt.Errorf("DOINSPECT_PASSWORD_HASH is not a bcrypt hash: %v", err)
+		}
+		c.PasswordHash = h
+	}
 
 	if len(c.Targets) == 0 && c.LocalName == "" {
 		return c, fmt.Errorf("nothing to measure: set DOINSPECT_TARGETS or DOINSPECT_LOCAL")
