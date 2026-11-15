@@ -263,6 +263,7 @@ func TestNetworkPage(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("network page %d", code)
 	}
+	balancedTags(t, "/network", body)
 	for _, want := range []string{"EXAMPLE-AS Example ISP", "AS64500", "192.0.2.99", "495 Mbit/s", "99.0 Mbit/s", "3.1 ms", "25 ms",
 		">gateway<", "192.0.2.1", "Ping (round trip)", "now 1.2 ms", "unreachable", ">pihole<", "192.0.2.53:53", "now 4.0 ms",
 		"Failed lookups in this range", "576 of 5760 (10 %)", "lookup of cloudflare.com", "changed", "time limit 2m0s reached",
@@ -389,6 +390,7 @@ func TestLogin(t *testing.T) {
 				t.Errorf("%s login page shows %q", path, leak)
 			}
 		}
+		balancedTags(t, path+" login", body)
 		if !strings.Contains(body, `name="next" value="`+template.HTMLEscapeString(path)+`"`) {
 			t.Errorf("%s: next not kept", path)
 		}
@@ -445,5 +447,28 @@ func TestLogin(t *testing.T) {
 	f.h.ServeHTTP(rr, httptest.NewRequest("POST", "/logout", nil))
 	if c := rr.Result().Cookies(); rr.Code != 303 || len(c) != 1 || c[0].MaxAge >= 0 {
 		t.Fatalf("logout %d %+v", rr.Code, c)
+	}
+}
+
+// balancedTags fails when a page opens a div or section it does not close, or closes one it did
+// not open. A stray close tag ends the page column early (B002).
+func balancedTags(t *testing.T, page, body string) {
+	t.Helper()
+	for _, tag := range []string{"div", "section"} {
+		open := strings.Count(body, "<"+tag+">") + strings.Count(body, "<"+tag+" ")
+		if shut := strings.Count(body, "</"+tag+">"); open != shut {
+			t.Errorf("%s: %d <%s> opened, %d closed", page, open, tag, shut)
+		}
+	}
+}
+
+func TestTagsBalance(t *testing.T) {
+	f := newFixture(t)
+	for _, path := range []string{"/", "/apps", "/machines", "/machine/pi-host"} {
+		code, body := f.get(t, path)
+		if code != 200 {
+			t.Fatalf("%s %d", path, code)
+		}
+		balancedTags(t, path, body)
 	}
 }
